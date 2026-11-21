@@ -1,0 +1,42 @@
+<div class="brand-row">
+  <div class="brand">Upian AI</div>
+</div>
+<nav class="nav">
+  <a href="{{ url_for('home') }}" class="{{ 'on' if active == 'chat' else '' }}">Chat</a>
+  <a href="{{ url_for('plans_page') }}" class="{{ 'on' if active == 'plans' else '' }}" onclick="if(window.openPlanModal){event.preventDefault();window.openPlanModal();}">Plans & Upgrade</a>
+  <a href="{{ url_for('files_page') }}" class="{{ 'on' if active == 'files' else '' }}">My files</a>
+  <a href="{{ url_for('activity') }}" class="{{ 'on' if active == 'activity' else '' }}">My activity</a>
+  {% if me.is_admin %}<a href="{{ url_for('admin_home') }}">Admin dashboard</a>{% endif %}
+</nav>
+<div class="side-history-section" id="side-history-section">
+  <div class="side-history-head">
+    <span class="side-history-title">Chat history</span>
+    <button type="button" class="btn-side-new" id="side-new-chat-btn" title="Start a fresh chat conversation">+ New</button>
+  </div>
+  <div class="side-history-list" id="side-history-list">
+    <div class="history-empty">No previous chats yet.</div>
+  </div>
+</div>
+<div class="grow"></div>
+<div class="who-box">
+  <div class="who-top" id="who-profile-view">
+    <div class="who-name-row">
+      <div class="who-name-left">
+        <span class="who-name" id="who-display-name" title="Click to edit your nickname">{{ me.name }}</span>
+        <button type="button" class="btn-nickname-edit" id="btn-edit-nickname" title="Edit nickname" aria-label="Edit nickname">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="nickname-edit-box" id="nickname-edit-box" hidden>
+    <input type="text" id="nickname-input" class="nickname-input" value="{{ me.name }}" maxlength="60" placeholder="Enter nickname">
+    <button type="button" id="nickname-save-btn" class="nickname-btn save" title="Save nickname">✓</button>
+    <button type="button" id="nickname-cancel-btn" class="nickname-btn cancel" title="Cancel">✕</button>
+  </div>
+  <div class="who-mail">{{ me.email }}</div>
+  <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link logout-btn" type="submit">Sign out</button></form>
+</div>

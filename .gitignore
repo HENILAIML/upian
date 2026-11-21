@@ -1,0 +1,10 @@
+models/
+uploads/
+vision_outputs/
+__pycache__/
+*.pyc
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+node_modules/

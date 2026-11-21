@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+{% block title %}Plans & Pricing · Upian AI{% endblock %}
+{% block body_class %}app page{% endblock %}
+{% block body %}
+<div class="shell two">
+  <aside class="side" id="sidebar">
+    {% set active = 'plans' %}
+    {% include "_side.html" %}
+  </aside>
+
+  <main class="page-main plans-page-main">
+    <header class="page-head">
+      <div class="page-head-title">
+        <span class="page-badge">
+          <span class="pulse-dot"></span>
+          <span>Subscription Plans & Upgrade</span>
+        </span>
+        <h1>Choose Your Intelligence Tier</h1>
+        <p class="sub">Dynamic model routing with smart reasoning, multimodal vision, and ultra-HD image generation. Upgrade or downgrade anytime.</p>
+      </div>
+      <div class="current-plan-card-mini">
+        <span class="mini-label">Your Current Plan</span>
+        <div class="mini-badge-wrap">
+          <span class="who-plan-badge {{ me.plan }}" id="page-current-plan-badge">{{ PLANS[me.plan].label }}</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Plan selector grid -->
+    <div class="plan-select-grid plans-page-grid" id="page-plan-grid">
+      <!-- Free Plan Card -->
+      <div class="plan-card {{ 'selected' if current_plan == 'free' else '' }}" data-plan="free" data-price="0" data-label="Free" onclick="selectPagePlan('free')">
+        <div class="plan-card-head">
+          <span class="plan-tag free-tag">COMMUNITY</span>
+          <div class="plan-card-title">
+            <h3>Free</h3>
+          </div>
+          <div class="plan-card-price">
+            <span class="currency">₹</span>
+            <span class="amount">0</span>
+            <span class="period">/forever</span>
+          </div>
+        </div>
+        <p class="plan-card-desc">Essential multimodal gateway with daily community quota for individuals.</p>
+        <ul class="plan-features-list">
+          <li><span>✓</span> <b>20 requests</b> / day (400 / month)</li>
+          <li><span>✓</span> <b>50,000 token</b> context window</li>
+          <li><span>✓</span> Smart dual-tier classifier (flash-lite & pro)</li>
+          <li><span>✓</span> Standard response latency</li>
+          <li class="dim"><span>✕</span> No AI image generation</li>
+        </ul>
+        <div class="plan-card-foot">
+          {% if current_plan == 'free' %}
+            <button type="button" class="btn block sm plan-select-btn current-active" disabled>Current Plan</button>
+          {% else %}
+            <button type="button" class="btn block sm plan-select-btn" onclick="selectPagePlan('free'); event.stopPropagation();">Downgrade to Free</button>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Pro Plan Card -->
+      <div class="plan-card {{ 'selected' if current_plan in ['pro', 'plus'] else '' }}" data-plan="pro" data-price="999" data-label="Pro" onclick="selectPagePlan('pro')">
+        <div class="plan-card-head">
+          <span class="plan-tag popular">RECOMMENDED</span>
+          <div class="plan-card-title">
+            <h3>Pro</h3>
+          </div>
+          <div class="plan-card-price">
+            <span class="currency">₹</span>
+            <span class="amount">999</span>
+            <span class="period">/month</span>
+            <span class="usd-alt">($15)</span>
+          </div>
+        </div>
+        <p class="plan-card-desc">For power creators and developers needing serious daily throughput.</p>
+        <ul class="plan-features-list">
+          <li><span>✓</span> <b>100 requests</b> / day (2,000 / month)</li>
+          <li><span>✓</span> <b>20 AI Images</b> per day (Imagen 3 / DALL-E)</li>
+          <li><span>✓</span> <b>High-reasoning models</b> (Gemini 2.5 Pro / Claude)</li>
+          <li><span>✓</span> Priority queue with instant response SLA</li>
+          <li><span>✓</span> Unlimited PDF, Word, & Excel export</li>
+        </ul>
+        <div class="plan-card-foot">
+          {% if current_plan in ['pro', 'plus'] %}
+            <button type="button" class="btn block sm plan-select-btn current-active" disabled>Current Plan</button>
+          {% else %}
+            <button type="button" class="btn block sm primary plan-select-btn" onclick="selectPagePlan('pro'); event.stopPropagation();">Select Pro</button>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Pro Plus Plan Card -->
+      <div class="plan-card {{ 'selected' if current_plan in ['pro_plus', 'plus_pro'] else '' }}" data-plan="pro_plus" data-price="1999" data-label="Pro Plus" onclick="selectPagePlan('pro_plus')">
+        <div class="plan-card-head">
+          <span class="plan-tag max">MAXIMUM POWER</span>
+          <div class="plan-card-title">
+            <h3>Pro Plus</h3>
+          </div>
+          <div class="plan-card-price">
+            <span class="currency">₹</span>
+            <span class="amount">1,999</span>
+            <span class="period">/month</span>
+            <span class="usd-alt">($29)</span>
+          </div>
+        </div>
+        <p class="plan-card-desc">Unlimited complexity for advanced teams and intensive multimodal research.</p>
+        <ul class="plan-features-list">
+          <li><span>✓</span> <b>300 requests</b> / day (6,000 / month)</li>
+          <li><span>✓</span> <b>30 AI Images</b> per day with 4K upscaling</li>
+          <li><span>✓</span> <b>Dedicated Fallback Keys</b> (zero downtime)</li>
+          <li><span>✓</span> Full Video & Multimodal Audio analysis</li>
+          <li><span>✓</span> 24/7 dedicated support & 99.9% uptime SLA</li>
+        </ul>
+        <div class="plan-card-foot">
+          {% if current_plan in ['pro_plus', 'plus_pro'] %}
+            <button type="button" class="btn block sm plan-select-btn current-active" disabled>Current Plan</button>
+          {% else %}
+            <button type="button" class="btn block sm primary plan-select-btn" onclick="selectPagePlan('pro_plus'); event.stopPropagation();">Select Pro Plus</button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Payment section (visible when an upgrade or change is chosen) -->
+    <div class="page-pay-container" id="page-pay-container">
+      <div class="pay-section">
+        <div class="pay-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; border-bottom: 1px solid var(--line2); padding-bottom: 14px;">
+          <div>
+            <h3 id="checkout-title" style="font: 800 20px var(--display); color: var(--ink); margin: 0 0 4px;">Complete Checkout for Pro Plan</h3>
+            <p class="dim small" id="checkout-subtitle" style="margin: 0;">Instant activation via UPI, Card, or Net Banking.</p>
+          </div>
+          <div class="checkout-amount-badge" style="background: var(--surface); border: 2px solid var(--ink); border-radius: 12px; padding: 6px 14px; box-shadow: 2px 2px 0 var(--ink);">
+            <span class="curr" style="font-weight: 700; font-size: 14px;">₹</span><span id="checkout-price-display" style="font: 800 22px var(--display);">999</span><span class="per" style="font-size: 12px; color: var(--mute);">/mo</span>
+          </div>
+        </div>
+
+        <div id="checkout-form-area">
+          <div class="pay-method-tabs" role="tablist">
+            <button type="button" class="pay-tab-btn active" data-tab="upi" onclick="setCheckoutMethod('upi')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              <span>UPI / QR Code</span>
+            </button>
+            <button type="button" class="pay-tab-btn" data-tab="card" onclick="setCheckoutMethod('card')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              <span>Credit / Debit Card</span>
+            </button>
+            <button type="button" class="pay-tab-btn" data-tab="netbanking" onclick="setCheckoutMethod('netbanking')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
+              <span>Net Banking</span>
+            </button>
+          </div>
+
+          <!-- UPI Tab Content -->
+          <div class="pay-content-tab" id="page-tab-upi">
+            <div class="upi-box">
+              <div class="upi-qr-area">
+                <div class="upi-qr-img" id="page-qr-code">
+                  <svg width="112" height="112" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="100" height="100" fill="white" rx="6"/>
+                    <rect x="8" y="8" width="30" height="30" rx="4" fill="#2e2016"/>
+                    <rect x="13" y="13" width="20" height="20" rx="2" fill="white"/>
+                    <rect x="18" y="18" width="10" height="10" fill="#ee7f35"/>
+                    <rect x="62" y="8" width="30" height="30" rx="4" fill="#2e2016"/>
+                    <rect x="67" y="13" width="20" height="20" rx="2" fill="white"/>
+                    <rect x="72" y="18" width="10" height="10" fill="#ee7f35"/>
+                    <rect x="8" y="62" width="30" height="30" rx="4" fill="#2e2016"/>
+                    <rect x="13" y="67" width="20" height="20" rx="2" fill="white"/>
+                    <rect x="18" y="72" width="10" height="10" fill="#ee7f35"/>
+                    <rect x="44" y="14" width="6" height="16" fill="#2e2016"/>
+                    <rect x="54" y="24" width="4" height="6" fill="#2e2016"/>
+                    <rect x="44" y="44" width="12" height="12" rx="3" fill="#ee7f35"/>
+                    <rect x="62" y="44" width="8" height="6" fill="#2e2016"/>
+                    <rect x="74" y="44" width="16" height="6" fill="#2e2016"/>
+                    <rect x="62" y="54" width="6" height="14" fill="#2e2016"/>
+                    <rect x="72" y="54" width="12" height="6" fill="#2e2016"/>
+                    <rect x="62" y="74" width="14" height="18" fill="#2e2016"/>
+                    <rect x="80" y="66" width="10" height="10" fill="#2e2016"/>
+                    <rect x="14" y="44" width="18" height="6" fill="#2e2016"/>
+                    <rect x="24" y="54" width="8" height="4" fill="#2e2016"/>
+                    <rect x="44" y="62" width="8" height="18" fill="#2e2016"/>
+                    <rect x="54" y="74" width="4" height="16" fill="#2e2016"/>
+                  </svg>
+                </div>
+                <div class="upi-info">
+                  <span class="upi-step">1. Scan QR with Google Pay, PhonePe, Paytm, or BHIM</span>
+                  <div class="upi-id-badge">
+                    <span id="page-upi-id-val">upian@upi</span>
+                    <button type="button" class="btn-copy-upi" id="btn-page-copy-upi" onclick="copyPageUPI()">📋 Copy UPI ID</button>
+                  </div>
+                  <span class="upi-apps-note">2. Enter your 12-digit UPI UTR / Transaction Reference number:</span>
+                  <input type="text" class="inp" id="page-upi-ref" placeholder="e.g. 432890184712 (optional for testing)" maxlength="30">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card Tab Content -->
+          <div class="pay-content-tab" id="page-tab-card" style="display:none;">
+            <div class="card-form-grid">
+              <div class="field-wrap full">
+                <label>Card Number</label>
+                <input type="text" class="inp" id="page-card-num" placeholder="4532 •••• •••• 8821" maxlength="19">
+              </div>
+              <div class="field-wrap">
+                <label>Expiry Date</label>
+                <input type="text" class="inp" id="page-card-exp" placeholder="MM / YY" maxlength="5">
+              </div>
+              <div class="field-wrap">
+                <label>CVV / CVC</label>
+                <input type="password" class="inp" id="page-card-cvv" placeholder="•••" maxlength="4">
+              </div>
+              <div class="field-wrap full">
+                <label>Cardholder Name</label>
+                <input type="text" class="inp" id="page-card-name" value="{{ me.name }}" placeholder="Name on card">
+              </div>
+            </div>
+          </div>
+
+          <!-- Netbanking Tab Content -->
+          <div class="pay-content-tab" id="page-tab-netbanking" style="display:none;">
+            <div class="bank-select-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">
+              <label class="bank-pill" style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #fff; border: 1.5px solid var(--line2); border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600;"><input type="radio" name="page-bank" value="HDFC" checked> <span>HDFC Bank</span></label>
+              <label class="bank-pill" style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #fff; border: 1.5px solid var(--line2); border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600;"><input type="radio" name="page-bank" value="SBI"> <span>SBI</span></label>
+              <label class="bank-pill" style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #fff; border: 1.5px solid var(--line2); border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600;"><input type="radio" name="page-bank" value="ICICI"> <span>ICICI Bank</span></label>
+              <label class="bank-pill" style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #fff; border: 1.5px solid var(--line2); border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600;"><input type="radio" name="page-bank" value="AXIS"> <span>Axis Bank</span></label>
+              <label class="bank-pill" style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #fff; border: 1.5px solid var(--line2); border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600;"><input type="radio" name="page-bank" value="KOTAK"> <span>Kotak Bank</span></label>
+            </div>
+          </div>
+
+          <div class="plan-modal-foot" style="margin-top: 20px;">
+            <button type="button" class="btn-upgrade-action" id="btn-page-submit-pay" onclick="submitPagePayment()">
+              <span id="page-pay-btn-text">Pay ₹999 & Upgrade to Pro</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <div class="pay-secure-note" style="margin-top: 8px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span>256-bit Encrypted Checkout · Instant plan provisioning · Cancel anytime</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Success notification view -->
+        <div class="plan-modal-success" id="page-pay-success" style="display:none; text-align: center; padding: 24px 10px;">
+          <div class="success-icon-wrap" style="width: 68px; height: 68px; border-radius: 50%; background: var(--weak-bg); color: var(--weak); font-size: 34px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; border: 2px solid var(--weak); box-shadow: 0 6px 16px rgba(12,138,90,.25);">✓</div>
+          <h3 id="page-success-title" style="font: 800 26px var(--display); color: var(--ink); margin: 0 0 8px;">Upgrade Successful!</h3>
+          <p id="page-success-desc" style="font-size: 15px; color: var(--ink2); margin: 0 0 16px;">You are now upgraded to the Pro plan. Your limits and capabilities have been updated immediately.</p>
+          <div class="tx-badge" id="page-tx-ref" style="display: inline-block; background: var(--surface); border: 1.5px dashed var(--line2); padding: 8px 16px; border-radius: 8px; font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 20px;">TX-ID: UPIAN-PAY-8F29A</div>
+          <div>
+            <a href="{{ url_for('home') }}" class="btn primary" style="font-size: 15px; padding: 10px 22px;">💬 Return to Chat</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script id="boot" type="application/json">{{ boot|tojson }}</script>
+
+<script>
+(function () {
+  var currentPlan = "{{ current_plan }}";
+  var selectedPlan = currentPlan === 'free' ? 'pro' : (currentPlan === 'plus_pro' || currentPlan === 'pro_plus' ? 'pro_plus' : 'pro');
+  var selectedMethod = 'upi';
+  var prices = { free: 0, pro: 999, pro_plus: 1999 };
+  var labels = { free: 'Free', pro: 'Pro', pro_plus: 'Pro Plus' };
+
+  window.selectPagePlan = function (plan) {
+    selectedPlan = plan;
+    var cards = document.querySelectorAll('.plans-page-grid .plan-card');
+    cards.forEach(function (c) {
+      if (c.getAttribute('data-plan') === plan) {
+        c.classList.add('selected');
+      } else {
+        c.classList.remove('selected');
+      }
+    });
+
+    var titleEl = document.getElementById('checkout-title');
+    var priceEl = document.getElementById('checkout-price-display');
+    var btnTextEl = document.getElementById('page-pay-btn-text');
+    var payContainer = document.getElementById('page-pay-container');
+
+    if (priceEl) priceEl.textContent = prices[plan] || 0;
+
+    if (plan === 'free') {
+      if (titleEl) titleEl.textContent = 'Switch to Community Free Plan';
+      if (btnTextEl) btnTextEl.textContent = 'Switch to Free Plan';
+    } else {
+      if (titleEl) titleEl.textContent = 'Complete Checkout for ' + (labels[plan] || plan) + ' Plan';
+      if (btnTextEl) btnTextEl.textContent = 'Pay ₹' + (prices[plan] || 0) + ' & Upgrade to ' + (labels[plan] || plan);
+    }
+
+    if (payContainer) {
+      payContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  };
+
+  window.setCheckoutMethod = function (m) {
+    selectedMethod = m;
+    var tabs = document.querySelectorAll('.pay-tab-btn');
+    tabs.forEach(function (t) {
+      if (t.getAttribute('data-tab') === m) {
+        t.classList.add('active');
+      } else {
+        t.classList.remove('active');
+      }
+    });
+
+    var upiTab = document.getElementById('page-tab-upi');
+    var cardTab = document.getElementById('page-tab-card');
+    var netTab = document.getElementById('page-tab-netbanking');
+
+    if (upiTab) upiTab.style.display = (m === 'upi') ? 'block' : 'none';
+    if (cardTab) cardTab.style.display = (m === 'card') ? 'block' : 'none';
+    if (netTab) netTab.style.display = (m === 'netbanking') ? 'block' : 'none';
+  };
+
+  window.copyPageUPI = function () {
+    var upiVal = document.getElementById('page-upi-id-val');
+    var copyBtn = document.getElementById('btn-page-copy-upi');
+    if (!upiVal || !copyBtn) return;
+    var text = upiVal.textContent.trim();
+    navigator.clipboard.writeText(text).then(function () {
+      copyBtn.textContent = '✓ Copied!';
+      setTimeout(function () { copyBtn.textContent = '📋 Copy UPI ID'; }, 2000);
+    }).catch(function () {
+      copyBtn.textContent = '✓ upian@upi';
+    });
+  };
+
+  window.submitPagePayment = async function () {
+    var btn = document.getElementById('btn-page-submit-pay');
+    var btnText = document.getElementById('page-pay-btn-text');
+    var originalText = btnText ? btnText.textContent : 'Pay';
+
+    if (btn) btn.disabled = true;
+    if (btnText) btnText.textContent = 'Processing Payment...';
+
+    var refInput = document.getElementById('page-upi-ref');
+    var txRef = (refInput && refInput.value.trim()) ? refInput.value.trim() : ('UPI-' + Date.now().toString(36).toUpperCase());
+
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrf = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+    try {
+      var res = await fetch('/api/payment/process', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrf
+        },
+        body: JSON.stringify({
+          plan: selectedPlan,
+          payment_method: selectedMethod,
+          tx_ref: txRef
+        })
+      });
+
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payment failed');
+
+      // Show success view!
+      var formArea = document.getElementById('checkout-form-area');
+      var successView = document.getElementById('page-pay-success');
+      var successTitle = document.getElementById('page-success-title');
+      var successDesc = document.getElementById('page-success-desc');
+      var txRefEl = document.getElementById('page-tx-ref');
+      var badgeEl = document.getElementById('page-current-plan-badge');
+
+      if (formArea) formArea.style.display = 'none';
+      if (successView) successView.style.display = 'block';
+
+      var newLabel = data.plan_label || labels[selectedPlan] || selectedPlan;
+      if (successTitle) successTitle.textContent = 'Successfully Activated ' + newLabel + '!';
+      if (successDesc) successDesc.textContent = data.message || ('You are now subscribed to the ' + newLabel + ' plan.');
+      if (txRefEl) txRefEl.textContent = 'TX-ID: ' + (data.transaction_id || txRef);
+
+      if (badgeEl) {
+        badgeEl.textContent = newLabel;
+        badgeEl.className = 'who-plan-badge ' + (data.plan || selectedPlan);
+      }
+
+      var sideBadge = document.getElementById('btn-buy-plan');
+      if (sideBadge) {
+        var labelSpan = sideBadge.querySelector('#who-plan-label');
+        if (labelSpan) labelSpan.textContent = newLabel;
+        sideBadge.className = 'who-plan-badge ' + (data.plan || selectedPlan);
+        var cue = sideBadge.querySelector('.badge-upgrade-cue');
+        if (cue) cue.style.display = (data.plan === 'free') ? 'inline-block' : 'none';
+      }
+
+    } catch (err) {
+      alert('Payment Error: ' + err.message);
+      if (btn) btn.disabled = false;
+      if (btnText) btnText.textContent = originalText;
+    }
+  };
+
+  // Initialize
+  selectPagePlan(selectedPlan);
+})();
+</script>
+{% endblock %}

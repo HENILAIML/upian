@@ -1,0 +1,77 @@
+/* Shared helpers */
+const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+function api(path, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({ 'X-CSRF-Token': CSRF }, opts.headers || {});
+  opts.credentials = 'same-origin';
+  return fetch(path, opts);
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function fmtNum(n) { return Number(n || 0).toLocaleString('en-IN'); }
+function fmtMs(ms) {
+  if (ms == null) return '-';
+  return ms >= 1000 ? (ms / 1000).toFixed(2) + 's' : ms + 'ms';
+}
+function fmtTime(iso) {
+  return iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
+}
+function fmtDateTime(iso) {
+  return iso ? new Date(iso).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
+}
+function tierLabel(t) { return t === 'strong' ? 'Strong' : 'Light'; }
+
+/* Small bar showing the complexity score against the routing threshold. */
+function gauge(score, threshold) {
+  var s = Math.max(0, Math.min(1, Number(score) || 0));
+  var t = Math.max(0, Math.min(1, Number(threshold) || 0.5));
+  return '<span class="gauge" title="Complexity ' + s.toFixed(2) + ' (strong model above ' + t.toFixed(2) + ')">' +
+    '<b style="width:' + Math.round(s * 100) + '%"></b><i class="cut" style="left:' + Math.round(t * 100) + '%"></i></span>';
+}
+
+/* Tiny, safe markdown: fenced code, inline code, bold, paragraphs. Everything is escaped first. */
+function renderMd(src) {
+  var parts = String(src).split('```');
+  return parts.map(function (p, i) {
+    if (i % 2 === 1) {
+      var nl = p.indexOf('\n'), code = p;
+      if (nl > -1 && /^[\w+#.\-]*$/.test(p.slice(0, nl).trim())) code = p.slice(nl + 1);
+      return '<pre><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>';
+    }
+    return esc(p).split(/\n{2,}/).filter(function (x) { return x.trim(); }).map(function (para) {
+      var h = para.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+      return '<p>' + h.replace(/\n/g, '<br>') + '</p>';
+    }).join('');
+  }).join('');
+}
+
+/* Usage meters in the sidebar (chat and activity pages). */
+function resetText(iso) {
+  var ms = new Date(iso) - Date.now();
+  if (!(ms > 0)) return 'soon';
+  var h = Math.floor(ms / 3600000), m = Math.round((ms % 3600000) / 60000);
+  return 'in ' + (h ? h + 'h ' : '') + m + 'm';
+}
+function meter(label, o) {
+  var pct = o.limit ? Math.min(100, Math.round(o.used / o.limit * 100)) : 0;
+  var cls = pct >= 100 ? 'full' : pct >= 80 ? 'high' : '';
+  return '<div class="meter ' + cls + '"><div class="meter-top"><span>' + label + '</span><b>' + fmtNum(o.used) +
+    ' of ' + fmtNum(o.limit) + '</b></div><div class="bar"><i style="width:' + pct + '%"></i></div></div>';
+}
+function renderUsage(u) {
+  var box = document.getElementById('meters');
+  if (!box || !u) return;
+  box.innerHTML = meter('Today', u.day) + meter('This month', u.month) + meter('Strong model, this month', u.strong);
+  var name = document.getElementById('plan-name'); if (name) name.textContent = u.plan_label;
+  var note = document.getElementById('reset-note');
+  if (note) note.textContent = 'Daily count resets ' + resetText(u.day_resets_at) + '.';
+}
+(function () {
+  var boot = document.getElementById('boot');
+  if (boot) { try { renderUsage(JSON.parse(boot.textContent).usage); } catch (e) {} }
+})();

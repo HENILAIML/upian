@@ -1,0 +1,7 @@
+{% if pag.pages > 1 %}
+<nav class="pager">
+  {% if pag.has_prev %}<a class="btn sm" href="{{ url_for(request.endpoint, page=pag.prev_num, q=q, tier=tier, status=status) }}">Previous</a>{% endif %}
+  <span class="dim small">Page {{ pag.page }} of {{ pag.pages }}</span>
+  {% if pag.has_next %}<a class="btn sm" href="{{ url_for(request.endpoint, page=pag.next_num, q=q, tier=tier, status=status) }}">Next</a>{% endif %}
+</nav>
+{% endif %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block body_class %}admin{% endblock %}
+{% block body %}
+<div class="a-shell">
+  <aside class="a-side">
+    <div class="brand">Upian AI <span class="admin-tag">Admin</span></div>
+    <nav class="nav">
+      <a href="{{ url_for('admin_home') }}" class="{{ 'on' if active == 'overview' else '' }}">Overview</a>
+      <a href="{{ url_for('admin_analytics_page') }}" class="{{ 'on' if active == 'analytics' else '' }}">Analytics</a>
+      <a href="{{ url_for('admin_users') }}" class="{{ 'on' if active == 'users' else '' }}">Users</a>
+      <a href="{{ url_for('admin_requests') }}" class="{{ 'on' if active == 'requests' else '' }}">Requests</a>
+    </nav>
+    <div class="grow"></div>
+    <div class="who-box">
+      <a href="{{ url_for('home') }}">Back to chat</a>
+      <div class="who-mail">{{ me.email }}</div>
+      <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link" type="submit">Sign out</button></form>
+    </div>
+  </aside>
+  <main class="a-main">
+    {% with messages = get_flashed_messages() %}{% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% endblock %}

@@ -1,0 +1,276 @@
+(function () {
+  var boot = JSON.parse(document.getElementById('boot').textContent);
+  var $ = function (id) { return document.getElementById(id); };
+  var thread = $('thread'), scroller = $('scroller'), form = $('composer'), input = $('prompt');
+  var sendBtn = $('send'), liveList = $('live-list');
+  var emptyHTML = $('empty').outerHTML;
+  var KEY = 'upian_chat_' + boot.uid;
+  var history = [];
+  try { history = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { history = []; }
+  var busy = false;
+
+  /* attach files picker */
+  var attachList = $('attach-list'), attachSum = $('attach-sum'), chips = $('chips'), docs = [];
+  function selectedIds() {
+    return Array.from(attachList.querySelectorAll('input:checked')).map(function (c) { return Number(c.value); });
+  }
+  function refreshChips() {
+    var ids = selectedIds();
+    attachSum.textContent = ids.length ? 'Attached: ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') : 'Attach files';
+    chips.innerHTML = docs.filter(function (d) { return ids.indexOf(d.id) >= 0; }).map(function (d) {
+      return '<span class="chip">' + esc(d.filename) + '</span>';
+    }).join('');
+  }
+  api('/api/docs').then(function (r) { return r.json(); }).then(function (d) {
+    docs = d.items;
+    attachList.innerHTML = docs.length ? docs.map(function (f) {
+      return '<label class="attach-row"><input type="checkbox" value="' + f.id + '"> <span>' + esc(f.filename) + '</span></label>';
+    }).join('') : '<span class="dim small">No files yet. <a href="/files">Upload one</a>.</span>';
+    refreshChips();
+  }).catch(function () { attachList.textContent = 'Could not load files.'; });
+  attachList.addEventListener('change', refreshChips);
+
+  /* save an answer as a file */
+  var LOCAL = { csv: 1, json: 1, html: 1, xlsx: 1 };
+  function download(blob, name) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  function csvCell(v) { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  function loadXlsx() {
+    return new Promise(function (ok, fail) {
+      if (window.XLSX) return ok();
+      var s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload = function () { ok(); };
+      s.onerror = function () { fail(new Error('Could not load the Excel library. Check your internet connection.')); };
+      document.head.appendChild(s);
+    });
+  }
+  function saveXlsx(tables) {
+    loadXlsx().then(function () {
+      var wb = XLSX.utils.book_new();
+      tables.forEach(function (t, k) {
+        var ws = XLSX.utils.aoa_to_sheet([t.head].concat(t.rows));
+        XLSX.utils.book_append_sheet(wb, ws, 'Table ' + (k + 1));
+      });
+      XLSX.writeFile(wb, 'upian-answer.xlsx');
+    }).catch(function (e) { alert(e.message); });
+  }
+  function saveLocal(fmt, text) {
+    var tables = mdTables(text);
+    if (fmt === 'xlsx') { saveXlsx(tables); return; }
+    if (fmt === 'csv') {
+      var rows = [];
+      tables.forEach(function (t, k) {
+        if (k) rows.push([]);
+        rows.push(t.head); t.rows.forEach(function (r) { rows.push(r); });
+      });
+      var csv = rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n');
+      download(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }), 'upian-answer.csv');
+    } else if (fmt === 'json') {
+      var data = tables.length ? { text: text, tables: tables.map(function (t) {
+        return t.rows.map(function (r) { var o = {}; t.head.forEach(function (h, k) { o[h] = r[k] == null ? '' : r[k]; }); return o; });
+      }) } : { text: text };
+      download(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'upian-answer.json');
+    } else {
+      var html = '<!doctype html><html><head><meta charset="utf-8"><title>Upian answer</title><style>' +
+        'body{font:16px/1.6 system-ui,sans-serif;max-width:800px;margin:2em auto;padding:0 1em}' +
+        'table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:6px 10px}th{background:#eee}' +
+        'pre{background:#f4f4f4;padding:12px;overflow:auto}</style></head><body>' + renderMd(text) + '</body></html>';
+      download(new Blob([html], { type: 'text/html;charset=utf-8' }), 'upian-answer.html');
+    }
+  }
+  thread.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-save]');
+    if (!b) return;
+    var msg = b.closest('.msg');
+    if (LOCAL[b.dataset.save]) { saveLocal(b.dataset.save, msg._text); return; }
+    b.disabled = true;
+    api('/api/create-file', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: msg._text, format: b.dataset.save }) })
+      .then(function (r) {
+        if (!r.ok) return r.json().then(function (j) { throw new Error(j.error || 'Could not create the file.'); });
+        return r.blob();
+      })
+      .then(function (blob) { download(blob, 'upian-answer.' + b.dataset.save); })
+      .catch(function (err) { alert(err.message); })
+      .finally(function () { b.disabled = false; });
+  });
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(history.slice(-60))); } catch (e) {} }
+  function toBottom() { scroller.scrollTop = scroller.scrollHeight; }
+  function dropEmpty() { var e = $('empty'); if (e) e.remove(); }
+
+  function metaLine(m) {
+    return '<div class="meta"><span class="tag ' + m.tier + '">' + tierLabel(m.tier) + '</span>' +
+      (m.fallback ? '<span class="tag fb">Fallback key</span>' : '') +
+      (m.downgraded ? '<span class="tag fb">Strong quota used up</span>' : '') +
+      '<span class="mono">' + esc(m.model) + '</span>' +
+      '<span>' + fmtNum(m.tokens_in) + ' tokens in, ' + fmtNum(m.tokens_out) + ' out</span>' +
+      '<span>' + fmtMs(m.latency_ms) + '</span></div>';
+  }
+
+  var CREATE = ['txt', 'md', 'docx', 'pdf', 'html', 'json'];
+  function actionsBlock(role, filesUsed, content) {
+    if (role !== 'assistant') return '';
+    var used = filesUsed && filesUsed.length ? '<div class="used">Used files: ' + filesUsed.map(esc).join(', ') + '</div>' : '';
+    var fmts = CREATE.slice();
+    if (mdTables(content).length) { fmts.splice(2, 0, 'csv'); fmts.splice(3, 0, 'xlsx'); }
+    return used + '<div class="actions"><span class="dim small">Save answer as</span>' +
+      fmts.map(function (f) { return '<button type="button" class="btn sm" data-save="' + f + '">.' + f + '</button>'; }).join('') + '</div>';
+  }
+
+  function addMessage(role, content, meta, filesUsed) {
+    dropEmpty();
+    var el = document.createElement('article');
+    el.className = 'msg ' + role;
+    var body = role === 'user' ? '<p>' + esc(content).replace(/\n/g, '<br>') + '</p>' : renderMd(content);
+    el.innerHTML = '<div class="who">' + (role === 'user' ? 'You' : role === 'error' ? 'Could not answer' : 'Upian') +
+      '</div><div class="body">' + body + '</div>' + (meta ? metaLine(meta) : '') + actionsBlock(role, filesUsed, content);
+    el._text = content;
+    thread.appendChild(el);
+    toBottom();
+    return el;
+  }
+
+  function addPending() {
+    var el = document.createElement('article');
+    el.className = 'msg assistant';
+    el.innerHTML = '<div class="who">Upian</div><div class="body pending-text"><span class="dots"><i></i><i></i><i></i></span><span class="ptext">Choosing a model</span></div>';
+    thread.appendChild(el);
+    toBottom();
+    return el;
+  }
+
+  function liveRow(it) {
+    var failed = it.status === 'error';
+    return '<li class="live-row ' + (failed ? 'err' : '') + '" data-id="' + it.id + '">' +
+      '<div class="l1"><span class="tag ' + (failed ? 'err' : it.tier) + '">' + (failed ? 'Failed' : tierLabel(it.tier)) + '</span>' +
+      '<span class="mono model">' + esc(it.model || '') + '</span>' +
+      (it.fallback ? '<span class="tag fb">Fallback key</span>' : '') +
+      (it.downgraded ? '<span class="tag fb">Downgraded</span>' : '') + '</div>' +
+      '<div class="l2">' + esc(it.prompt) + '</div>' +
+      '<div class="l3">' + gauge(it.complexity, boot.threshold) +
+      '<span>' + (failed ? 'No tokens counted' : fmtNum(it.tokens_in) + ' in, ' + fmtNum(it.tokens_out) + ' out') + '</span>' +
+      '<span>' + (failed ? '' : fmtMs(it.latency_ms)) + '</span><span>' + fmtTime(it.created_at) + '</span></div></li>';
+  }
+
+  function clearPlaceholder() { var p = liveList.querySelector('.live-empty'); if (p) p.remove(); }
+
+  function addLivePending(prompt) {
+    clearPlaceholder();
+    var li = document.createElement('li');
+    li.className = 'live-row pending';
+    li.innerHTML = '<div class="l1"><span class="tag neutral">Routing</span><span class="mono model">classifying prompt</span></div>' +
+      '<div class="l2">' + esc(prompt.slice(0, 120)) + '</div><div class="l3"><span class="t">0.0s</span></div>';
+    liveList.prepend(li);
+    var t0 = performance.now(), t = li.querySelector('.t');
+    var iv = setInterval(function () { t.textContent = ((performance.now() - t0) / 1000).toFixed(1) + 's'; }, 100);
+    return { el: li, stop: function () { clearInterval(iv); } };
+  }
+
+  function replaceLive(row, log) {
+    if (log) { row.el.outerHTML = liveRow(log); } else { row.el.remove(); }
+  }
+
+  function onRoute(ev, pend, row) {
+    var tag = row.el.querySelector('.tag');
+    tag.className = 'tag ' + ev.tier;
+    tag.textContent = tierLabel(ev.tier);
+    row.el.querySelector('.model').textContent = ev.model;
+    var txt = 'Sent to the ' + (ev.tier === 'strong' ? 'strong' : 'light') + ' model (' + ev.model + ')';
+    if (ev.downgraded) txt += '. Your strong-model quota for this month is used up';
+    pend.querySelector('.ptext').textContent = txt;
+  }
+
+  function onDone(ev, pend, row) {
+    pend.remove();
+    addMessage('assistant', ev.reply, ev.log, ev.files_used);
+    history.push({ role: 'assistant', content: ev.reply, meta: ev.log, files_used: ev.files_used });
+    save();
+    replaceLive(row, ev.log);
+    renderUsage(ev.usage);
+  }
+
+  function onError(ev, pend, row) {
+    if (pend.isConnected) pend.remove();
+    if (history.length && history[history.length - 1].role === 'user') { history.pop(); save(); }
+    addMessage('error', ev.error || 'Something went wrong.');
+    if (row.el.isConnected) replaceLive(row, ev.log);
+    if (ev.usage) renderUsage(ev.usage);
+  }
+
+  async function send(prompt) {
+    if (busy) return;
+    busy = true; sendBtn.disabled = true;
+    var prior = history.slice(-8).map(function (m) { return { role: m.role, content: m.content }; });
+    history.push({ role: 'user', content: prompt }); save();
+    addMessage('user', prompt);
+    var pend = addPending(), row = addLivePending(prompt), finished = false;
+    try {
+      var res = await api('/api/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompt, history: prior, doc_ids: selectedIds() })
+      });
+      if (!res.ok) {
+        var j = await res.json().catch(function () { return {}; });
+        if (j.usage) renderUsage(j.usage);
+        throw new Error(j.error || 'Request failed (' + res.status + ')');
+      }
+      var reader = res.body.getReader(), dec = new TextDecoder(), buf = '';
+      for (;;) {
+        var chunk = await reader.read();
+        if (chunk.done) break;
+        buf += dec.decode(chunk.value, { stream: true });
+        var i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          var line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+          if (!line) continue;
+          var ev = JSON.parse(line);
+          if (ev.event === 'route') onRoute(ev, pend, row);
+          else if (ev.event === 'done') { finished = true; onDone(ev, pend, row); }
+          else if (ev.event === 'error') { finished = true; onError(ev, pend, row); }
+        }
+      }
+      if (!finished) throw new Error('The connection closed before an answer arrived.');
+    } catch (e) {
+      if (!finished) onError({ error: e.message }, pend, row);
+    } finally {
+      row.stop(); busy = false; sendBtn.disabled = false; input.focus();
+    }
+  }
+
+  /* wiring */
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var p = input.value.trim();
+    if (!p || busy) return;
+    input.value = ''; input.style.height = 'auto';
+    send(p);
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); }
+  });
+  input.addEventListener('input', function () {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 200) + 'px';
+  });
+  thread.addEventListener('click', function (e) {
+    var b = e.target.closest('.starter');
+    if (b) { input.value = b.dataset.p; input.focus(); }
+  });
+  $('new-chat').addEventListener('click', function () {
+    history = []; save(); thread.innerHTML = emptyHTML; input.focus();
+  });
+
+  history.forEach(function (m) { addMessage(m.role, m.content, m.meta, m.files_used); });
+  scroller.scrollTop = scroller.scrollHeight;
+
+  api('/api/activity?limit=10').then(function (r) { return r.json(); }).then(function (d) {
+    liveList.innerHTML = d.items.length ? d.items.map(liveRow).join('') : '<li class="live-empty">Your requests will show up here as they run.</li>';
+  }).catch(function () {
+    liveList.innerHTML = '<li class="live-empty">Could not load recent activity.</li>';
+  });
+})();

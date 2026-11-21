@@ -1,0 +1,40 @@
+{% extends "admin_base.html" %}
+{% block title %}Requests · Upian admin{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><h1>Requests</h1><p class="sub">{{ pag.total|num }} matching</p></div>
+  <form class="filters" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="User email">
+    <select name="tier" aria-label="Tier"><option value="">Any tier</option><option value="strong" {{ 'selected' if tier == 'strong' else '' }}>Strong</option><option value="weak" {{ 'selected' if tier == 'weak' else '' }}>Weak</option></select>
+    <select name="status" aria-label="Status"><option value="">Any status</option><option value="success" {{ 'selected' if status == 'success' else '' }}>Succeeded</option><option value="error" {{ 'selected' if status == 'error' else '' }}>Failed</option></select>
+    <button class="btn" type="submit">Filter</button>
+  </form>
+</header>
+
+<div class="panel flush">
+  <div class="table-wrap">
+  <table class="tbl">
+    <thead><tr><th>Time</th><th>User</th><th>Prompt</th><th>Routing</th><th>Model</th><th class="r">Tokens in / out</th><th class="r">Latency</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for r in pag.items %}
+      <tr>
+        <td class="dim nowrap">{{ r.created_at|localdt('%d %b, %H:%M:%S') }}</td>
+        <td class="small">{{ r.user.email if r.user else '-' }}</td>
+        <td class="clip" title="{{ r.prompt }}">{{ r.prompt }}</td>
+        <td class="nowrap"><span class="tag {{ r.tier }}">{{ r.tier|capitalize }}</span>
+          <span class="gauge" title="Complexity {{ r.complexity }} (threshold {{ threshold }})"><i style="left: {{ (threshold * 100)|round|int }}%" class="cut"></i><b style="width: {{ ((r.complexity or 0) * 100)|round|int }}%"></b></span>
+          <span class="dim small">{{ '%.2f'|format(r.complexity or 0) }}</span></td>
+        <td class="small">{{ r.model or '-' }}{% if r.fallback %} <span class="tag fb">fallback</span>{% endif %}{% if r.downgraded %} <span class="tag fb">downgraded</span>{% endif %}<div class="dim small">{{ r.slot }}</div></td>
+        <td class="r nowrap">{{ r.tokens_in|num }} / {{ r.tokens_out|num }}</td>
+        <td class="r nowrap">{{ ('%.2fs'|format(r.latency_ms / 1000)) if r.status == 'success' else '-' }}</td>
+        <td>{% if r.status == 'success' %}<span class="tag weak">OK</span>{% else %}<span class="tag err" title="{{ r.error }}">Failed</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="dim">No requests match.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% include "_pager.html" %}
+{% endblock %}

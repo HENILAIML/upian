@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} · Upian AI{% endblock %}
+{% block body_class %}plain{% endblock %}
+{% block body %}
+<main class="err-page">
+  <p class="err-code">{{ code }}</p>
+  <h1>{{ message }}</h1>
+  <p><a class="btn" href="{{ url_for('home') }}">Back to Upian</a></p>
+</main>
+{% endblock %}

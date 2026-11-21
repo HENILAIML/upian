@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<title>{% block title %}Upian AI{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='4.9') }}">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+{% block body %}{% endblock %}
+
+<!-- PLAN & PAYMENT MODAL -->
+<div id="plan-payment-modal" class="modal-backdrop plan-modal-backdrop" hidden>
+  <div class="plan-modal-box">
+    <button type="button" class="plan-modal-close" id="plan-modal-close" title="Close" aria-label="Close">&times;</button>
+    
+    <div id="plan-modal-body-step">
+      <div class="plan-modal-header">
+        <div class="plan-modal-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+        </div>
+        <div>
+          <h2>Choose Your Plan</h2>
+          <p class="plan-modal-sub">Upgrade your account to unlock AI image generation, deep reasoning models, and unlimited exports.</p>
+        </div>
+      </div>
+
+      <div class="plan-select-grid" id="plan-select-grid">
+        <!-- Free Plan Card -->
+        <label class="plan-card" data-plan="free">
+          <input type="radio" name="selected_plan" value="free">
+          <div class="plan-card-head">
+            <div class="plan-card-title">
+              <span class="plan-tag free-tag">STARTER</span>
+              <h3>Free</h3>
+            </div>
+            <div class="plan-card-price">
+              <span class="currency">₹</span><span class="amount">0</span><span class="period">/forever</span>
+              <span class="usd-alt">($0 USD)</span>
+            </div>
+          </div>
+          <p class="plan-card-desc">Essential multimodal gateway with daily community quota.</p>
+          <ul class="plan-features-list">
+            <li><span>✔</span> <b>20 requests</b> per day</li>
+            <li><span>✔</span> <b>300 requests</b> per month</li>
+            <li><span>✔</span> <b>40 deep reasoning</b> calls</li>
+            <li><span>✔</span> Multimodal chat & files</li>
+            <li><span style="color:#e05252;">✕</span> <i>No AI Image Generation</i></li>
+          </ul>
+        </label>
+
+        <!-- Pro Plan Card -->
+        <label class="plan-card selected" data-plan="pro">
+          <input type="radio" name="selected_plan" value="pro" checked>
+          <div class="plan-card-head">
+            <div class="plan-card-title">
+              <span class="plan-tag popular">RECOMMENDED</span>
+              <h3>Pro</h3>
+            </div>
+            <div class="plan-card-price">
+              <span class="currency">₹</span><span class="amount">999</span><span class="period">/mo</span>
+              <span class="usd-alt">($12 USD)</span>
+            </div>
+          </div>
+          <p class="plan-card-desc">For power users who need high daily limits and AI image generation.</p>
+          <ul class="plan-features-list">
+            <li><span>✔</span> <b>100 daily requests</b> with priority speeds</li>
+            <li><span>✔</span> <b>20 AI Images per day</b> (Google Imagen 3 & DALL-E)</li>
+            <li><span>✔</span> <b>Deep Reasoning</b> (Qwen3 + Gemini 3.8 Flash)</li>
+            <li><span>✔</span> <b>Document exports</b> (.xlsx, .pdf, .docx)</li>
+          </ul>
+        </label>
+
+        <!-- Pro Plus Plan Card -->
+        <label class="plan-card" data-plan="pro_plus">
+          <input type="radio" name="selected_plan" value="pro_plus">
+          <div class="plan-card-head">
+            <div class="plan-card-title">
+              <span class="plan-tag max">MAX POWER</span>
+              <h3>Pro Plus</h3>
+            </div>
+            <div class="plan-card-price">
+              <span class="currency">₹</span><span class="amount">1,999</span><span class="period">/mo</span>
+              <span class="usd-alt">($24 USD)</span>
+            </div>
+          </div>
+          <p class="plan-card-desc">Maximum limits and dedicated access to top-tier models.</p>
+          <ul class="plan-features-list">
+            <li><span>✔</span> <b>Unlimited daily requests</b></li>
+            <li><span>✔</span> <b>30 AI Images per day</b> (Ultra-HD Quality)</li>
+            <li><span>✔</span> <b>Gemini 3.8 Pro + Complex Reasoning</b></li>
+            <li><span>✔</span> <b>Priority 24/7 support & early beta access</b></li>
+          </ul>
+        </label>
+      </div>
+
+      <!-- Payment Methods Section -->
+      <div class="pay-section">
+        <h4>Select Payment Method</h4>
+        <div class="pay-method-tabs" id="pay-method-tabs">
+          <button type="button" class="pay-tab-btn active" data-method="upi">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            <span>UPI / QR Code</span>
+          </button>
+          <button type="button" class="pay-tab-btn" data-method="card">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+            <span>Debit / Credit Card</span>
+          </button>
+          <button type="button" class="pay-tab-btn" data-method="netbanking">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 10h18M5 10v11M19 10v11M9 10v11M15 10v11M12 2L2 7h20L12 2z"></path></svg>
+            <span>Net Banking</span>
+          </button>
+        </div>
+
+        <!-- UPI Tab View -->
+        <div class="pay-tab-view" id="view-upi">
+          <div class="upi-box">
+            <div class="upi-qr-area">
+              <div class="upi-qr-img">
+                <svg width="124" height="124" viewBox="0 0 100 100" fill="#1d1b2e">
+                  <rect width="100" height="100" fill="#ffffff" rx="8"></rect>
+                  <path d="M10 10h28v28H10zM14 14v20h20V14zM18 18h12v12H18zM62 10h28v28H62zM66 14v20h20V14zM70 18h12v12H70zM10 62h28v28H10zM14 66v20h20V66zM18 70h12v12H18zM42 10h6v6h-6zM52 10h6v6h-6zM46 18h8v6h-8zM42 26h6v12h-6zM52 30h6v8h-6zM62 42h8v6h-8zM74 42h8v6h-8zM86 42h4v12h-4zM42 46h6v8h-6zM52 46h6v6h-6zM62 52h6v6h-6zM74 52h6v8h-6zM42 62h6v6h-6zM52 62h6v16h-6zM62 62h8v6h-8zM74 66h8v6h-8zM86 62h4v16h-4zM62 74h6v6h-6zM74 78h6v10h-6zM42 78h6v10h-6zM62 84h8v6h-8zM86 84h4v6h-4z"></path>
+                  <circle cx="50" cy="50" r="11" fill="#ee7f35"></circle>
+                  <text x="50" y="54" text-anchor="middle" fill="#fff" font-size="8.5" font-weight="bold">UPI</text>
+                </svg>
+              </div>
+              <div class="upi-info">
+                <span class="upi-step">Scan & Pay with any UPI app</span>
+                <div class="upi-id-badge">
+                  <span id="upi-vpa">upian@okicici</span>
+                  <button type="button" class="btn-copy-upi" id="btn-copy-upi" title="Copy UPI ID">Copy</button>
+                </div>
+                <span class="upi-apps-note">Google Pay · PhonePe · Paytm · BHIM</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card Tab View -->
+        <div class="pay-tab-view" id="view-card" hidden>
+          <div class="card-form-grid">
+            <div class="field-wrap full">
+              <label>Card Number</label>
+              <input type="text" class="inp" id="card-num" placeholder="4532 •••• •••• 8892" maxlength="19">
+            </div>
+            <div class="field-wrap">
+              <label>Expiry Date</label>
+              <input type="text" class="inp" id="card-exp" placeholder="MM / YY" maxlength="5">
+            </div>
+            <div class="field-wrap">
+              <label>CVV / CVC</label>
+              <input type="password" class="inp" id="card-cvv" placeholder="•••" maxlength="4">
+            </div>
+            <div class="field-wrap full">
+              <label>Cardholder Name</label>
+              <input type="text" class="inp" id="card-name" placeholder="Name on card" value="{{ me.name if me else '' }}">
+            </div>
+          </div>
+        </div>
+
+        <!-- Net Banking Tab View -->
+        <div class="pay-tab-view" id="view-netbanking" hidden>
+          <div class="field-wrap full">
+            <label>Select Bank</label>
+            <select class="inp" id="bank-select">
+              <option value="HDFC">HDFC Bank</option>
+              <option value="SBI">State Bank of India</option>
+              <option value="ICICI">ICICI Bank</option>
+              <option value="AXIS">Axis Bank</option>
+              <option value="KOTAK">Kotak Mahindra Bank</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer / Action Button -->
+      <div class="plan-modal-foot">
+        <button type="button" class="btn-upgrade-action" id="btn-confirm-payment">
+          <span id="pay-btn-text">Pay ₹999 & Upgrade to Pro</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </button>
+        <div class="pay-secure-note">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <span>256-Bit SSL Encrypted · Instant Plan Activation</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Success View -->
+    <div class="plan-modal-success" id="plan-modal-success" hidden>
+      <div class="success-icon-wrap">✔</div>
+      <h3>Payment Successful!</h3>
+      <p id="success-plan-msg">Welcome to <b>Upian AI Pro</b>! Your account has been upgraded and your quota is boosted.</p>
+      <div class="tx-badge" id="success-tx-id">TX: UPIAN-PAY-8F92A1</div>
+      <button type="button" class="btn primary" id="btn-success-done">Continue to Chat</button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/common.js', v='4.8') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

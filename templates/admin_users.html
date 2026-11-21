@@ -1,0 +1,53 @@
+{% extends "admin_base.html" %}
+{% block title %}Users · Upian admin{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><h1>Users</h1><p class="sub">{{ pag.total }} {{ 'account' if pag.total == 1 else 'accounts' }}{% if q %} matching “{{ q }}”{% endif %}</p></div>
+  <form class="filters" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search name or email">
+    <button class="btn" type="submit">Search</button>
+  </form>
+</header>
+
+<div class="panel flush">
+  <div class="table-wrap">
+  <table class="tbl">
+    <thead><tr><th>User</th><th>Plan</th><th class="r">Today</th><th class="r">This month</th><th>Joined</th><th>Last sign-in</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for u in pag.items %}
+      {% set pl = PLANS.get(u.plan) or PLANS['free'] %}
+      <tr>
+        <td><div class="strong-text">{{ u.name }}{% if u.is_admin %} <span class="tag neutral">admin</span>{% endif %}</div><div class="dim small">{{ u.email }}</div></td>
+        <td>
+          <form method="post" action="{{ url_for('admin_set_plan', uid=u.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <select name="plan" aria-label="Plan for {{ u.email }}" onchange="this.form.submit()">
+              {% for p in plan_order %}<option value="{{ p }}" {{ 'selected' if u.plan == p else '' }}>{{ PLANS[p].label }}</option>{% endfor %}
+            </select>
+          </form>
+        </td>
+        <td class="r">{{ day_counts.get(u.id, 0) }} of {{ pl.daily }}</td>
+        <td class="r">{{ month_counts.get(u.id, 0) }} of {{ pl.monthly }}</td>
+        <td class="dim">{{ u.created_at|localdt('%d %b %Y') }}</td>
+        <td class="dim">{{ u.last_login|localdt }}</td>
+        <td>{% if u.active %}<span class="tag weak">Active</span>{% else %}<span class="tag err">Disabled</span>{% endif %}</td>
+        <td class="r">
+          {% if u.id != me.id %}
+          <form method="post" action="{{ url_for('admin_toggle_user', uid=u.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button class="btn sm {{ 'danger' if u.active else '' }}" type="submit">{{ 'Disable' if u.active else 'Enable' }}</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="dim">No users found.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% include "_pager.html" %}
+{% endblock %}
