@@ -114,12 +114,75 @@ function renderMd(src) {
   var parts = String(src).split('```');
   return parts.map(function (p, i) {
     if (i % 2 === 1) {
-      var nl = p.indexOf('\n'), code = p;
-      if (nl > -1 && /^[\w+#.\-]*$/.test(p.slice(0, nl).trim())) code = p.slice(nl + 1);
-      return '<pre><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>';
+      var nl = p.indexOf('\n'), code = p, lang = 'code';
+      if (nl > -1 && /^[\w+#.\-]*$/.test(p.slice(0, nl).trim())) {
+        var detected = p.slice(0, nl).trim();
+        if (detected) lang = detected;
+        code = p.slice(nl + 1);
+      }
+      var cleanCode = code.replace(/\n$/, '');
+      return '<div class="code-block-wrap">' +
+        '<div class="code-block-head">' +
+          '<span class="code-lang">' + esc(lang) + '</span>' +
+          '<button type="button" class="btn-copy-code" title="Copy code to clipboard">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> ' +
+            '<span>Copy</span>' +
+          '</button>' +
+        '</div>' +
+        '<pre><code>' + esc(cleanCode) + '</code></pre>' +
+      '</div>';
     }
     return mdText(p);
   }).join('');
+}
+
+/* Global copy button handler for fenced code blocks (Clipboard API + fallback) */
+document.addEventListener('click', function (e) {
+  var btn = e.target.closest('.btn-copy-code');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  var wrap = btn.closest('.code-block-wrap');
+  var codeEl = wrap ? wrap.querySelector('pre code') : null;
+  var rawText = codeEl ? codeEl.textContent : '';
+
+  function onCopied() {
+    var span = btn.querySelector('span');
+    var oldText = span ? span.textContent : 'Copy';
+    btn.classList.add('copied');
+    if (span) span.textContent = 'Copied!';
+    setTimeout(function () {
+      btn.classList.remove('copied');
+      if (span) span.textContent = oldText;
+    }, 2000);
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(rawText).then(onCopied).catch(function () {
+      fallbackCopyCode(rawText, onCopied);
+    });
+  } else {
+    fallbackCopyCode(rawText, onCopied);
+  }
+});
+
+function fallbackCopyCode(text, cb) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  ta.style.top = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand('copy');
+    if (cb) cb();
+  } catch (err) {
+    console.error('Fallback copy failed', err);
+  }
+  document.body.removeChild(ta);
 }
 
 /* Pull every markdown table out of an answer: [{head:[...], rows:[[...]]}] */
@@ -304,21 +367,152 @@ function renderUsage(u) {
   var planCards = document.querySelectorAll('.plan-card');
   var methodTabs = document.querySelectorAll('.pay-tab-btn');
   var tabViews = {
+    razorpay: document.getElementById('view-razorpay'),
     upi: document.getElementById('view-upi'),
     card: document.getElementById('view-card'),
     netbanking: document.getElementById('view-netbanking')
   };
 
-  var selectedPlan = 'pro';
-  var selectedMethod = 'upi';
+  var selectedPlan = null;
+  var selectedMethod = 'razorpay';
+  var modalMode = 'presets'; // 'presets' or 'dynamic'
+  var customExtraFeatures = [];
+
+  window.updateCustomPlanSummary = function () {
+    var input = document.getElementById('custom-plan-name-input');
+    var name = (input && input.value.trim()) ? input.value.trim() : 'My Custom Plan';
+    var pill = document.getElementById('custom-summary-name-pill');
+    if (pill) pill.textContent = name;
+    window.recalculateModalPrice();
+  };
+
+  window.addCustomExtraFeature = function () {
+    var input = document.getElementById('custom-extra-feature-input');
+    if (!input) return;
+    var feat = input.value.trim();
+    if (!feat) return;
+    if (customExtraFeatures.indexOf(feat) === -1) {
+      customExtraFeatures.push(feat);
+    }
+    input.value = '';
+    renderCustomExtraFeatures();
+    window.recalculateModalPrice();
+  };
+
+  window.removeCustomExtraFeature = function (feat) {
+    customExtraFeatures = customExtraFeatures.filter(function (f) { return f !== feat; });
+    renderCustomExtraFeatures();
+    window.recalculateModalPrice();
+  };
+
+  function renderCustomExtraFeatures() {
+    var container = document.getElementById('custom-extra-features-container');
+    if (!container) return;
+    container.innerHTML = customExtraFeatures.map(function (f) {
+      return '<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(238,127,53,0.18);border:1px solid #ee7f35;color:#ee7f35;padding:3px 9px;border-radius:14px;font-size:12px;font-weight:600;">' +
+             '★ ' + f +
+             ' <button type="button" onclick="removeCustomExtraFeature(\'' + f.replace(/'/g, "\\'") + '\')" style="background:none;border:none;color:#ee7f35;cursor:pointer;font-weight:bold;padding:0 2px;">&times;</button>' +
+             '</span>';
+    }).join('');
+  }
+
+  window.currentBillingCycle = 'monthly';
+
+  function getServerPlans() {
+    if (window.SERVER_PLANS) return window.SERVER_PLANS;
+    try {
+      var scriptTag = document.getElementById('server-plans-data');
+      if (scriptTag && scriptTag.textContent) {
+        window.SERVER_PLANS = JSON.parse(scriptTag.textContent);
+        return window.SERVER_PLANS;
+      }
+    } catch (e) {
+      console.warn('Could not parse server-plans-data:', e);
+    }
+    return {};
+  }
+
+  function getPlanPrice(plan, cycle) {
+    var plans = getServerPlans();
+    var key = (plan === 'pro') ? 'plus' : ((plan === 'pro_plus') ? 'plus_pro' : plan);
+    var info = plans[key] || plans[plan];
+    if (info) {
+      if (cycle === 'yearly') {
+        var yr = parseFloat(info.price_inr_yearly || 0);
+        if (yr > 0) return yr;
+        var mo = parseFloat(info.price_inr || 0);
+        return Math.round(mo * 10);
+      }
+      return parseFloat(info.price_inr || 0);
+    }
+    var card = document.querySelector('#card-modal-' + plan);
+    if (card) {
+      var attr = (cycle === 'yearly') ? 'data-yearly-inr' : 'data-monthly-inr';
+      var val = parseFloat(card.getAttribute(attr) || '0');
+      if (val > 0) return val;
+    }
+    if (plan === 'pro') return cycle === 'yearly' ? 9999 : 999;
+    if (plan === 'pro_plus') return cycle === 'yearly' ? 19999 : 1999;
+    return 0;
+  }
+
+  window.switchBillingCycle = function (cycle) {
+    window.currentBillingCycle = cycle;
+    var btns = document.querySelectorAll('.btn-cycle-opt');
+    btns.forEach(function (b) {
+      if (b.id === 'btn-cycle-' + cycle || b.getAttribute('data-cycle') === cycle) {
+        b.classList.add('active');
+      } else {
+        b.classList.remove('active');
+      }
+    });
+
+    // Dynamically update each plan card in the modal
+    var cards = document.querySelectorAll('#modal-view-presets .plan-card');
+    cards.forEach(function (card) {
+      var planId = card.getAttribute('data-plan');
+      if (!planId || planId === 'free') return;
+      var inrPrice = (cycle === 'yearly') ? parseInt(card.getAttribute('data-yearly-inr') || '0', 10) : parseInt(card.getAttribute('data-monthly-inr') || '0', 10);
+      var usdPrice = (cycle === 'yearly') ? parseInt(card.getAttribute('data-yearly-usd') || '0', 10) : parseInt(card.getAttribute('data-monthly-usd') || '0', 10);
+      var label = card.getAttribute('data-label') || planId;
+
+      var amountEl = card.querySelector('.plan-card-price .amount');
+      var periodEl = card.querySelector('.plan-card-price .period');
+      var usdEl = card.querySelector('.plan-card-price .usd-alt');
+      var btnEl = card.querySelector('.btn-plan-select');
+
+      if (amountEl) amountEl.textContent = inrPrice.toLocaleString();
+      if (periodEl) periodEl.textContent = (cycle === 'yearly') ? '/yr' : '/mo';
+      if (usdEl) usdEl.textContent = (cycle === 'yearly') ? '($' + usdPrice.toLocaleString() + ' USD/yr)' : '($' + usdPrice.toLocaleString() + ' USD)';
+      if (btnEl) btnEl.textContent = 'Choose ' + label + ' (₹' + inrPrice.toLocaleString() + (cycle === 'yearly' ? '/yr' : '') + ')';
+    });
+
+    updatePayButton();
+  };
+
+  window.clearModalPlanSelection = function () {
+    selectedPlan = null;
+    var cards = document.querySelectorAll('#modal-view-presets .plan-card');
+    cards.forEach(function (c) {
+      c.classList.remove('selected');
+      var r = c.querySelector('input[type="radio"]');
+      if (r) r.checked = false;
+    });
+    if (paySection) paySection.hidden = true;
+    if (confirmBtn) confirmBtn.disabled = true;
+    if (payBtnText) payBtnText.textContent = 'Select a plan above to continue';
+  };
 
   window.openPlanModal = function (preferredPlan) {
     if (!modal) return;
-    if (preferredPlan) {
-      selectedPlan = preferredPlan;
-      var targetCard = document.querySelector('.plan-card[data-plan="' + preferredPlan + '"]');
-      if (targetCard) selectPlan(targetCard);
+    window.switchModalMode('presets');
+    window.clearModalPlanSelection();
+    if (preferredPlan === 'custom') {
+      window.switchModalMode('dynamic');
+      window.selectModalPlan('custom');
     }
+    // Never auto-select Pro or any other plan when opening modal.
+    // Let all cards start clean and unselected so the user chooses intentionally.
     if (bodyStep) bodyStep.hidden = false;
     if (successView) successView.hidden = true;
     modal.hidden = false;
@@ -354,32 +548,167 @@ function renderUsage(u) {
   if (buyPlanBtn && buyPlanBtn.tagName === 'BUTTON') {
     buyPlanBtn.addEventListener('click', function (e) {
       e.stopPropagation();
-      window.openPlanModal('pro');
+      window.openPlanModal();
     });
   }
 
-  function selectPlan(card) {
-    planCards.forEach(function (c) { c.classList.remove('selected'); });
-    card.classList.add('selected');
-    var radio = card.querySelector('input[type="radio"]');
-    if (radio) radio.checked = true;
-    selectedPlan = card.getAttribute('data-plan') || 'pro';
+  /* Mode Switcher / Selection */
+  window.switchModalMode = function (mode) {
+    if (mode === 'dynamic' || mode === 'custom') {
+      window.selectModalPlan('custom');
+    }
+  };
+
+  window.selectModalPlan = function (plan) {
+    if (selectedPlan === plan) {
+      // Clicking the already selected plan deselects it
+      window.clearModalPlanSelection();
+      return;
+    }
+    selectedPlan = plan;
+    var cards = document.querySelectorAll('#modal-view-presets .plan-card');
+    cards.forEach(function (c) {
+      if (c.getAttribute('data-plan') === plan) {
+        c.classList.add('selected');
+        var r = c.querySelector('input[type="radio"]');
+        if (r) r.checked = true;
+      } else {
+        c.classList.remove('selected');
+        var r2 = c.querySelector('input[type="radio"]');
+        if (r2) r2.checked = false;
+      }
+    });
     updatePayButton();
-  }
+  };
 
-  planCards.forEach(function (card) {
-    card.addEventListener('click', function () {
-      selectPlan(card);
+  /* Jump to Dynamic Builder from any Preset card with that preset loaded */
+  window.customizeFromPlan = function (plan, ev) {
+    if (ev) ev.stopPropagation();
+    window.switchModalMode('dynamic');
+    window.loadModalPreset(plan === 'free' ? 'core' : (plan === 'pro_plus' ? 'pro_plus' : 'pro'));
+  };
+
+  /* Quick presets inside builder */
+  window.loadModalPreset = function (presetKey) {
+    var buttons = document.querySelectorAll('.dyn-quick-presets .btn-quick-preset');
+    buttons.forEach(function (b) { b.classList.remove('active'); });
+
+    var targetId = (presetKey === 'pro') ? 'dyn-pre-pro' : ((presetKey === 'pro_plus') ? 'dyn-pre-max' : null);
+    if (targetId) {
+      var tb = document.getElementById(targetId);
+      if (tb) tb.classList.add('active');
+    }
+
+    var targets = {
+      core: ['core'],
+      pro: ['core', 'image_gen', 'reasoning'],
+      pro_plus: ['core', 'image_gen', 'reasoning', 'ocr_pdf', 'vision_vqa', 'priority_sla'],
+      all: ['core', 'image_gen', 'reasoning', 'ocr_pdf', 'vision_vqa', 'priority_sla', 'high_quota']
+    };
+
+    var activeList = targets[presetKey] || targets.pro;
+    var allCbs = document.querySelectorAll('.modal-feat-cb');
+    allCbs.forEach(function (cb) {
+      if (cb.value === 'core') return; // core is always checked
+      cb.checked = activeList.indexOf(cb.value) !== -1;
     });
-  });
+
+    window.recalculateModalPrice();
+  };
+
+  /* Toggle feature by card click */
+  window.toggleModalFeature = function (code, ev) {
+    if (ev && ev.target && ev.target.tagName === 'INPUT') return;
+    var cb = document.getElementById('mcb-' + code);
+    if (cb && !cb.disabled) {
+      cb.checked = !cb.checked;
+      window.recalculateModalPrice();
+    }
+  };
+
+  /* Dynamic price calculation */
+  window.recalculateModalPrice = function () {
+    var cbs = document.querySelectorAll('.modal-feat-cb:checked');
+    var total = 0;
+    var pills = [];
+
+    cbs.forEach(function (cb) {
+      total += parseInt(cb.getAttribute('data-price') || '0', 10);
+      var name = cb.getAttribute('data-name') || cb.value;
+      pills.push('<span class="dyn-feat-pill active">✓ ' + name + '</span>');
+    });
+
+    var isYearly = (window.currentBillingCycle === 'yearly');
+    var displayTotal = isYearly ? Math.round(total * 10) : total;
+
+    // Update card styling
+    var allCbs = document.querySelectorAll('.modal-feat-cb');
+    allCbs.forEach(function (cb) {
+      var card = document.getElementById('dyn-card-' + cb.value);
+      if (card) {
+        if (cb.checked) card.classList.add('checked');
+        else card.classList.remove('checked');
+      }
+    });
+
+    var priceEl = document.getElementById('modal-dyn-price');
+    if (priceEl) priceEl.textContent = displayTotal.toLocaleString();
+
+    var customPill = document.getElementById('btn-custom-price-pill');
+    if (customPill) customPill.textContent = '₹' + displayTotal.toLocaleString() + (isYearly ? '/yr' : '');
+
+    var customCardSelectBtn = document.getElementById('btn-custom-card-select');
+    if (customCardSelectBtn) {
+      customCardSelectBtn.innerHTML = 'Choose Custom (<span id="btn-custom-price-pill">₹' + displayTotal.toLocaleString() + (isYearly ? '/yr' : '') + '</span>)';
+    }
+
+    var usdEl = document.getElementById('modal-dyn-usd');
+    if (usdEl) {
+      var usd = Math.round(displayTotal / 83);
+      usdEl.textContent = '($' + usd + ' USD' + (isYearly ? '/yr)' : ')');
+    }
+
+    var upiAmount = document.getElementById('modal-upi-amount-display');
+    if (upiAmount) upiAmount.textContent = '₹' + displayTotal.toLocaleString();
+
+    var pillsBox = document.getElementById('modal-dyn-pills');
+    if (pillsBox) pillsBox.innerHTML = pills.join('');
+
+    var savingsBadge = document.getElementById('modal-bundle-savings');
+    if (savingsBadge) {
+      savingsBadge.style.display = (cbs.length >= 3) ? 'inline-block' : 'none';
+    }
+
+    if (modalMode === 'dynamic' || selectedPlan === 'custom') {
+      if (paySection) paySection.hidden = false;
+      if (confirmBtn) confirmBtn.disabled = false;
+      var cNameInput = document.getElementById('custom-plan-name-input');
+      var cName = (cNameInput && cNameInput.value.trim()) ? cNameInput.value.trim() : 'Custom Plan';
+      var cycleLabel = isYearly ? ' (Yearly - 365 Days)' : ' (Monthly)';
+      if (payBtnText) payBtnText.textContent = 'Pay ₹' + displayTotal.toLocaleString() + ' with Razorpay & Activate ' + cName + cycleLabel;
+    }
+  };
+
+  window.updateModalCustomPrice = window.recalculateModalPrice;
 
   function updatePayButton() {
     if (!payBtnText || !confirmBtn) return;
+    if (!selectedPlan) {
+      if (paySection) paySection.hidden = true;
+      confirmBtn.disabled = true;
+      payBtnText.textContent = 'Select a plan above to continue';
+      return;
+    }
     var planBadgeEl = document.getElementById('btn-buy-plan');
     var isCurrentFree = !planBadgeEl || planBadgeEl.classList.contains('free');
 
+    var upiAmount = document.getElementById('modal-upi-amount-display');
+    var isYearly = (window.currentBillingCycle === 'yearly');
+    var cycleLabel = isYearly ? ' (Yearly - 365 Days)' : ' (Monthly)';
+
     if (selectedPlan === 'free') {
       if (paySection) paySection.hidden = true;
+      if (upiAmount) upiAmount.textContent = '₹0';
       if (isCurrentFree) {
         confirmBtn.disabled = true;
         payBtnText.textContent = 'You are currently on Free Plan';
@@ -387,14 +716,17 @@ function renderUsage(u) {
         confirmBtn.disabled = false;
         payBtnText.textContent = 'Downgrade to Free Plan';
       }
-    } else if (selectedPlan === 'pro_plus') {
-      if (paySection) paySection.hidden = false;
-      confirmBtn.disabled = false;
-      payBtnText.textContent = 'Pay ₹1,999 & Upgrade to Pro Plus';
     } else {
       if (paySection) paySection.hidden = false;
       confirmBtn.disabled = false;
-      payBtnText.textContent = 'Pay ₹999 & Upgrade to Pro';
+      var card = document.querySelector('#modal-view-presets .plan-card[data-plan="' + selectedPlan + '"]');
+      var amt = getPlanPrice(selectedPlan, window.currentBillingCycle);
+      if ((!amt || amt === 0) && card) {
+        amt = isYearly ? parseInt(card.getAttribute('data-yearly-inr') || '0', 10) : parseInt(card.getAttribute('data-monthly-inr') || '0', 10);
+      }
+      var planLabel = (card && card.getAttribute('data-label')) || (serverPlans[selectedPlan] && serverPlans[selectedPlan].label) || selectedPlan;
+      payBtnText.textContent = 'Pay ₹' + amt.toLocaleString() + ' with Razorpay & Upgrade to ' + planLabel + cycleLabel;
+      if (upiAmount) upiAmount.textContent = '₹' + amt.toLocaleString();
     }
   }
 
@@ -402,7 +734,7 @@ function renderUsage(u) {
     btn.addEventListener('click', function () {
       methodTabs.forEach(function (b) { b.classList.remove('active'); });
       btn.classList.add('active');
-      selectedMethod = btn.getAttribute('data-method') || 'upi';
+      selectedMethod = btn.getAttribute('data-method') || 'razorpay';
 
       Object.keys(tabViews).forEach(function (k) {
         if (tabViews[k]) tabViews[k].hidden = (k !== selectedMethod);
@@ -423,8 +755,53 @@ function renderUsage(u) {
     });
   }
 
+  async function finalizePaymentProcess(payload, headers) {
+    var res = await fetch('/api/payment/process', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(payload)
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Payment failed');
+
+    // Show success screen
+    if (bodyStep) bodyStep.hidden = true;
+    if (successView) successView.hidden = false;
+
+    var txEl = document.getElementById('success-tx-id');
+    if (txEl && data.transaction_id) {
+      txEl.textContent = 'TX: ' + data.transaction_id;
+    }
+
+    var msgEl = document.getElementById('success-plan-msg');
+    if (msgEl) {
+      msgEl.innerHTML = 'Welcome to <b>Upian AI ' + (data.plan_label || 'Pro') + '</b>! Your plan has been saved and your quota is boosted.';
+    }
+
+    // Live update the sidebar badge!
+    var badge = document.getElementById('btn-buy-plan');
+    var newPlan = data.plan || selectedPlan;
+    var newLabel = data.plan_label || (newPlan === 'free' ? 'Free' : (newPlan === 'pro_plus' ? 'Pro Plus' : 'Pro'));
+    if (badge) {
+      badge.className = 'who-plan-badge ' + newPlan;
+      badge.innerHTML = '<span id="who-plan-label">' + newLabel + '</span>' + (newPlan === 'free' ? '<span class="badge-upgrade-cue">⚡ Upgrade</span>' : '');
+    }
+    var planNameEl = document.getElementById('plan-name');
+    if (planNameEl) {
+      planNameEl.textContent = newLabel;
+    }
+
+    // Close any upgrade modal if open
+    var upModal = document.getElementById('upgrade-modal');
+    if (upModal) upModal.hidden = true;
+  }
+
   if (confirmBtn) {
     confirmBtn.addEventListener('click', async function () {
+      if (!selectedPlan) {
+        alert('Please select a plan first.');
+        return;
+      }
       var csrf = document.querySelector('meta[name="csrf-token"]');
       var headers = { 'Content-Type': 'application/json' };
       if (csrf) headers['X-CSRF-Token'] = csrf.content;
@@ -434,47 +811,72 @@ function renderUsage(u) {
       if (payBtnText) payBtnText.textContent = 'Processing Payment...';
 
       try {
-        var res = await fetch('/api/payment/process', {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify({
-            plan: selectedPlan,
-            payment_method: selectedMethod
-          })
-        });
-        var data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Payment failed');
+        var isYearly = (window.currentBillingCycle === 'yearly');
+        var card = document.querySelector('#modal-view-presets .plan-card[data-plan="' + selectedPlan + '"]');
+        var amt = getPlanPrice(selectedPlan, window.currentBillingCycle);
+        if ((!amt || amt === 0) && card) {
+          amt = isYearly ? parseInt(card.getAttribute('data-yearly-inr') || '0', 10) : parseInt(card.getAttribute('data-monthly-inr') || '0', 10);
+        }
+        var payload = {
+          plan: selectedPlan,
+          billing_cycle: window.currentBillingCycle || 'monthly',
+          payment_method: selectedMethod,
+          amount: amt
+        };
 
-        // Show success screen
-        if (bodyStep) bodyStep.hidden = true;
-        if (successView) successView.hidden = false;
-
-        var txEl = document.getElementById('success-tx-id');
-        if (txEl && data.transaction_id) {
-          txEl.textContent = 'TX: ' + data.transaction_id;
+        if (selectedMethod === 'razorpay' && window.Razorpay) {
+          try {
+            var ordPayload = {
+              plan: selectedPlan,
+              billing_cycle: payload.billing_cycle,
+              amount: payload.amount || (selectedPlan === 'pro_plus' ? 1999 : 999),
+              custom_plan_name: payload.custom_plan_name || null
+            };
+            var ordRes = await fetch('/api/payment/razorpay/order', {
+              method: 'POST',
+              headers: headers,
+              body: JSON.stringify(ordPayload)
+            });
+            var ordData = await ordRes.json();
+            if (ordData.success && ordData.razorpay_enabled && ordData.order_id && !ordData.simulated) {
+              var rzp = new Razorpay({
+                key: ordData.key_id,
+                amount: Math.round(ordData.amount * 100),
+                currency: ordData.currency || 'INR',
+                name: 'Upian AI',
+                description: 'Subscription for ' + (ordData.plan_label || 'Pro'),
+                order_id: ordData.order_id,
+                handler: async function (response) {
+                  payload.razorpay_payment_id = response.razorpay_payment_id;
+                  payload.razorpay_order_id = response.razorpay_order_id;
+                  payload.razorpay_signature = response.razorpay_signature;
+                  try {
+                    await finalizePaymentProcess(payload, headers);
+                  } catch (pErr) {
+                    alert(pErr.message || 'Payment activation error');
+                  }
+                },
+                prefill: {
+                  name: document.getElementById('card-name') ? document.getElementById('card-name').value : '',
+                  email: ''
+                },
+                theme: { color: '#ee7f35' }
+              });
+              rzp.on('payment.failed', function (resp) {
+                alert('Payment failed: ' + (resp.error.description || 'Unknown error'));
+              });
+              rzp.open();
+              confirmBtn.disabled = false;
+              if (payBtnText) payBtnText.textContent = prevText;
+              return;
+            }
+          } catch (ordErr) {
+            console.warn('Razorpay order creation fallback:', ordErr);
+          }
         }
 
-        var msgEl = document.getElementById('success-plan-msg');
-        if (msgEl) {
-          msgEl.innerHTML = 'Welcome to <b>Upian AI ' + (data.plan_label || 'Pro') + '</b>! Your account has been upgraded and your quota is boosted.';
-        }
-
-        // Live update the sidebar badge!
-        var badge = document.getElementById('btn-buy-plan');
-        var newPlan = data.plan || selectedPlan;
-        var newLabel = data.plan_label || (newPlan === 'free' ? 'Free' : (newPlan === 'pro_plus' ? 'Pro Plus' : 'Pro'));
-        if (badge) {
-          badge.className = 'who-plan-badge ' + newPlan;
-          badge.innerHTML = '<span id="who-plan-label">' + newLabel + '</span>' + (newPlan === 'free' ? '<span class="badge-upgrade-cue">⚡ Upgrade</span>' : '');
-        }
-        var planNameEl = document.getElementById('plan-name');
-        if (planNameEl) {
-          planNameEl.textContent = newLabel;
-        }
-
-        // Close any upgrade modal if open
-        var upModal = document.getElementById('upgrade-modal');
-        if (upModal) upModal.hidden = true;
+        // Direct process fallback
+        await finalizePaymentProcess(payload, headers);
 
       } catch (err) {
         alert(err.message || 'Payment processing error');

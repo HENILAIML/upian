@@ -1,0 +1,58 @@
+000 2.250353s STRONG Design a distributed rate limiter in Redis for 100k requests per second and write the code
+000 2.234445s WEAK Hi
+000 2.250890s WEAK What is the capital of France
+000 2.231754s WEAK Say thanks in Spanish
+000 2.241240s WEAK What is 15 plus 27
+000 2.249418s WEAK Give me a synonym for happy
+000 2.241874s WEAK What day comes after Monday
+000 2.253465s WEAK Translate good morning to Hindi
+000 2.231509s WEAK Is the sun a star
+000 2.238569s WEAK Spell the word necessary
+000 2.236928s WEAK What does CPU stand for
+000 2.259605s STRONG Prove that the square root of 2 is irrational and generalize to any prime
+000 2.245686s WEAK Hi
+000 2.232199s WEAK What is the capital of France
+000 2.235289s WEAK Say thanks in Spanish
+000 2.251131s WEAK What is 15 plus 27
+000 2.238378s WEAK Give me a synonym for happy
+000 2.236458s WEAK What day comes after Monday
+000 2.263458s WEAK Translate good morning to Hindi
+000 2.241879s WEAK Is the sun a star
+000 2.241081s WEAK Spell the word necessary
+000 2.241115s WEAK What does CPU stand for
+000 2.233469s STRONG Review a Next.js and PostgreSQL architecture for race conditions and scaling problems and propose fixes
+000 2.251787s WEAK Hi
+000 2.236807s WEAK What is the capital of France
+000 2.244672s WEAK Say thanks in Spanish
+000 2.243148s WEAK What is 15 plus 27
+000 2.240097s WEAK Give me a synonym for happy
+000 2.241148s WEAK What day comes after Monday
+000 2.246802s WEAK Translate good morning to Hindi
+000 2.242227s WEAK Is the sun a star
+000 2.232781s WEAK Spell the word necessary
+000 2.239765s WEAK What does CPU stand for
+000 2.263204s STRONG Write a Python script that dedupes a 2GB CSV with fuzzy matching and upserts into PostgreSQL
+000 2.230455s WEAK Hi
+000 2.224365s WEAK What is the capital of France
+000 2.250051s WEAK Say thanks in Spanish
+000 2.251342s WEAK What is 15 plus 27
+000 2.243901s WEAK Give me a synonym for happy
+000 2.235063s WEAK What day comes after Monday
+000 2.259249s WEAK Translate good morning to Hindi
+000 2.245864s WEAK Is the sun a star
+000 2.242101s WEAK Spell the word necessary
+000 2.243445s WEAK What does CPU stand for
+000 2.255131s STRONG Compare B-tree LSM-tree and hash indexes for a write heavy workload with range queries
+000 2.255727s WEAK Hi
+000 2.239792s WEAK What is the capital of France
+000 2.240299s WEAK Say thanks in Spanish
+000 2.244518s WEAK What is 15 plus 27
+000 2.255375s WEAK Give me a synonym for happy
+000 2.256042s WEAK What day comes after Monday
+000 2.232849s WEAK Translate good morning to Hindi
+000 2.251486s WEAK Is the sun a star
+000 2.238512s WEAK Spell the word necessary
+000 2.263869s WEAK What does CPU stand for
+000 2.249844s STRONG Implement a thread safe LRU cache in Go with TTL expiry and concurrency tests
+000 2.228061s WEAK Hi
+000 2.253388s WEAK What is the capital of France

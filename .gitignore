@@ -1,8 +1,38 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Database & Local Dumps
+*.db
+*.db.backup
+*.dump
+upian.db*
+scratch/
+
+# Backups & Local Test Exports
+backups/
+backup_phase1_*/
+test_exports/
+test_results_detailed.json
+
+# Backup & Editor Artifacts
+*.bak*
+*.swp
+*.orig
+app.py.bak_vision
+file_routes.py.bak
+
+# Uploads & Generated Media
 models/
 uploads/
 vision_outputs/
+
+# Python Cache & Testing
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 *.log
 .pytest_cache/
 .coverage

@@ -4,6 +4,8 @@
   2. "give me that in excel/pdf/word/csv/ppt/json/html/txt/md" -> the previous answer turned into a real file
 Both can be combined: "gold price last 10 years in excel".
 """
+import ast
+import operator
 import re
 
 from datetime import datetime, timezone
@@ -12,10 +14,88 @@ import filetools
 import marketdata
 import quotes
 import weather
+import websearch
 from config import Config
 from file_routes import save_export
 
 TIP = ""
+
+
+_MATH_OPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Pow: operator.pow,
+    ast.Mod: operator.mod
+}
+
+def _safe_eval(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    elif isinstance(node, ast.BinOp):
+        left = _safe_eval(node.left)
+        right = _safe_eval(node.right)
+        op_type = type(node.op)
+        if op_type in _MATH_OPS:
+            return _MATH_OPS[op_type](left, right)
+    elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        return -_safe_eval(node.operand)
+    raise ValueError("Unsupported operation")
+
+
+def calculate_math(prompt):
+    if not prompt or not isinstance(prompt, str):
+        return None
+    p = prompt.strip().lower()
+    if any(k in p for k in ("python", "gemini", "gpt", "model", "version", "code", "function", "class", "gold", "silver")):
+        return None
+
+    # 1. Percentage calculations: "15 percent tip on 450", "18% gst on 1200", "20% discount on 800"
+    m_pct = re.search(r"(\d+(?:\.\d+)?)\s*(?:%|percent)\s*(?:tip|tax|gst|vat|discount|off)?\s*(?:on|of)?\s*(\d+(?:\.\d+)?)", p)
+    if m_pct:
+        pct = float(m_pct.group(1))
+        base = float(m_pct.group(2))
+        amt = round(base * (pct / 100.0), 2)
+        pct_str = f"{int(pct)}" if pct.is_integer() else f"{pct}"
+        base_str = f"{int(base)}" if base.is_integer() else f"{base}"
+        amt_str = f"{int(amt)}" if amt.is_integer() else f"{amt}"
+        if "discount" in p or "off" in p:
+            diff = round(base - amt, 2)
+            diff_str = f"{int(diff)}" if diff.is_integer() else f"{diff}"
+            return (
+                f"### Calculation Result\n\n"
+                f"- **{pct_str}% discount on {base_str}:** {amt_str}\n"
+                f"- **Final Price after discount:** {base_str} - {amt_str} = **{diff_str}**"
+            )
+        elif any(k in p for k in ("tip", "tax", "gst", "vat", "with tip", "plus")):
+            tot = round(base + amt, 2)
+            tot_str = f"{int(tot)}" if tot.is_integer() else f"{tot}"
+            label_name = "Tip" if "tip" in p else ("GST/Tax" if "gst" in p or "tax" in p else "Addon")
+            return (
+                f"### Calculation Result\n\n"
+                f"- **{pct_str}% {label_name} on {base_str}:** {amt_str}\n"
+                f"- **Total Amount:** {base_str} + {amt_str} = **{tot_str}**"
+            )
+        else:
+            return (
+                f"### Calculation Result\n\n"
+                f"- **{pct_str}% of {base_str}** = **{amt_str}**"
+            )
+
+    # 2. Arithmetic expressions: "calculate 25 * 40", "what is (100 + 50) / 3"
+    if re.search(r"\b(calculate|compute|solve|what is)\b", p) or re.match(r"^[0-9\.\s\+\-\*\/\(\)\^]+$", p):
+        clean_expr = re.sub(r"^(calculate|compute|solve|what is)\s*", "", p).rstrip("?").strip().replace("^", "**")
+        if any(op in clean_expr for op in ("+", "-", "*", "/")) and re.search(r"\d", clean_expr):
+            try:
+                tree = ast.parse(clean_expr, mode="eval")
+                val = _safe_eval(tree.body)
+                val_str = f"{int(val)}" if isinstance(val, (int, float)) and float(val).is_integer() else f"{val:g}"
+                orig_expr = clean_expr.replace("**", "^")
+                return f"### Calculation Result\n\n`{orig_expr}` = **{val_str}**"
+            except Exception:
+                pass
+    return None
 
 
 class SpecialError(Exception):
@@ -155,16 +235,23 @@ def handle(user_id, prompt, history):
     label = None
     rep = None
     try:
-        if weather.detect(prompt):
+        math_md = calculate_math(prompt)
+        if math_md:
+            label = "calculation"
+            rep = {"markdown": math_md, "source": "calculator", "slug": "calculation-result"}
+        elif weather.detect(prompt):
             label = "weather"
             rep = weather.report(prompt)
+        elif websearch.detect(prompt):
+            label = "web search"
+            rep = websearch.search(prompt)
         else:
-            asset = marketdata.detect_asset(prompt)
+            asset = marketdata.detect_asset(prompt, history=history)
             if asset:
                 label = asset + " price"
                 rep = marketdata.report(asset, prompt)
             else:
-                spec = quotes.detect(prompt)
+                spec = quotes.detect(prompt, history=history)
                 if spec:
                     label = "market"
                     rep = quotes.report(spec, prompt)

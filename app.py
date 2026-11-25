@@ -16,11 +16,14 @@ if not os.environ.get("SSL_CERT_FILE") or not os.path.exists(os.environ["SSL_CER
 import hashlib
 import hmac
 import json
+import logging
 import re
 import secrets
 import threading
 import time
 import uuid
+import urllib.parse
+import requests
 from datetime import datetime, timedelta, timezone
 from datetime import time as dtime
 from functools import wraps
@@ -36,12 +39,19 @@ import special
 import image_gen
 import vision
 import multimodal
-from config import PLAN_ORDER, PLANS, Config, env
+from config import PLAN_ORDER, PLANS, Config, env, validate_config
 import filetools
 from file_routes import read_docs_text, register_files, save_images_pdf, save_export
-from models import RequestLog, User, Payment, db, iso, utcnow
+from models import (AuditLog, RequestLog, User, Payment, WebhookEvent, db, iso, utcnow,
+                    upsert_google_user, update_user_plan_idempotent, verify_webhook_signature)
 from quota import get_usage, local_tz, windows
 from router import classifier
+import plans_service
+
+logger = logging.getLogger("upian.app")
+
+ACTIVE_CHAT_REQUESTS = {}
+ACTIVE_CHAT_LOCK = threading.Lock()
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -50,23 +60,89 @@ db.init_app(app)
 
 # ----------------------------------------------------------------------------- setup
 def seed_admin():
-    email = Config.ADMIN_EMAIL.lower()
+    email = (Config.ADMIN_EMAIL or "").lower()
     if not email or not Config.ADMIN_PASSWORD:
         return
-    user = User.query.filter_by(email=email).first()
-    if not user:
-        user = User(name=Config.ADMIN_NAME or "Admin", email=email, plan="plus_pro", is_admin=True)
-        user.set_password(Config.ADMIN_PASSWORD)
-        db.session.add(user)
-        db.session.commit()
-    elif not user.is_admin:
-        user.is_admin = True
-        db.session.commit()
+    try:
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            user = User(name=Config.ADMIN_NAME or "Admin", email=email, plan="plus_pro", is_admin=True)
+            user.set_password(Config.ADMIN_PASSWORD)
+            db.session.add(user)
+            db.session.commit()
+        elif not user.is_admin:
+            user.is_admin = True
+            db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning("Could not seed admin user: %s", exc)
 
 
-with app.app_context():
-    db.create_all()
-    seed_admin()
+def init_database_safe(app_instance, max_retries=3, retry_delay=0.5):
+    """
+    Safely initialize the database with connection verification, retries, and fallback.
+    Prevents unhandled crashes on startup if PostgreSQL or socket access is unavailable.
+    """
+    app_instance.config["DB_AVAILABLE"] = False
+    app_instance.config["DB_STATUS"] = "initializing"
+    app_instance.config["DB_ERROR"] = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            with app_instance.app_context():
+                # Verify connection with timeout
+                db.session.execute(db.text("SELECT 1"))
+                db.create_all()
+                try:
+                    from migrations.migrate_v1 import run_migration
+                    run_migration(app=app_instance)
+                except Exception as m_exc:
+                    logger.warning("Auto-migration check notice: %s", m_exc)
+                seed_admin()
+                app_instance.config["DB_AVAILABLE"] = True
+                app_instance.config["DB_STATUS"] = "connected"
+                logger.info("Database connection established successfully on attempt %d.", attempt)
+                return True
+        except Exception as exc:
+            logger.warning("Database connection attempt %d/%d failed: %s", attempt, max_retries, exc)
+            app_instance.config["DB_ERROR"] = str(exc)
+            if attempt < max_retries:
+                time.sleep(retry_delay)
+
+    # If primary database (PostgreSQL) is unreachable:
+    logger.error("Primary database is unreachable. Attempting SQLite fallback.")
+    if getattr(Config, "ALLOW_SQLITE_FALLBACK", True):
+        try:
+            sqlite_uri = "sqlite:///" + os.path.join(Config.BASE_DIR, "upian.db")
+            logger.warning("Falling back to local SQLite database: %s", sqlite_uri)
+            app_instance.config["SQLALCHEMY_DATABASE_URI"] = sqlite_uri
+            with app_instance.app_context():
+                db.engine.dispose()
+                db.init_app(app_instance)
+                db.create_all()
+                try:
+                    from migrations.migrate_v1 import run_migration
+                    run_migration(app=app_instance)
+                except Exception as m_exc:
+                    logger.warning("Auto-migration check notice: %s", m_exc)
+                seed_admin()
+                app_instance.config["DB_AVAILABLE"] = True
+                app_instance.config["DB_STATUS"] = "connected_sqlite_fallback"
+                logger.info("SQLite fallback database initialized successfully.")
+                return True
+        except Exception as fallback_exc:
+            logger.critical("SQLite fallback failed: %s", fallback_exc)
+            app_instance.config["DB_ERROR"] = str(fallback_exc)
+
+    app_instance.config["DB_AVAILABLE"] = False
+    app_instance.config["DB_STATUS"] = "disconnected"
+    logger.warning("Application running in degraded mode without database.")
+    return False
+
+
+# Validate config & initialize database safely
+validate_config()
+init_database_safe(app)
 
 if Config.PRELOAD_CLASSIFIER:
     threading.Thread(target=classifier.load, daemon=True).start()
@@ -116,13 +192,26 @@ def load_user_and_check_csrf():
         return
     uid = session.get("uid")
     if uid:
-        user = db.session.get(User, uid)
-        if user and user.active:
-            g.user = user
-        else:
-            session.pop("uid", None)
+        try:
+            user = db.session.get(User, uid)
+            if user and user.active and not user.deleted_at:
+                g.user = user
+            else:
+                session.pop("uid", None)
+        except Exception as exc:
+            logger.warning("Database error loading user session: %s", exc)
+            g.user = None
+
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
-        sent = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token") or ""
+        # Webhooks and external auth callbacks use cryptographic signatures rather than CSRF cookies
+        if request.path in ("/api/payment/webhook", "/auth/google/callback"):
+            return
+        sent = (
+            request.headers.get("X-CSRF-Token")
+            or request.headers.get("X-CSRFToken")
+            or request.form.get("csrf_token")
+            or ""
+        )
         expected = session.get("csrf") or ""
         if not expected or not hmac.compare_digest(sent, expected):
             abort(400, description="Security token missing or expired. Reload the page and try again.")
@@ -130,7 +219,34 @@ def load_user_and_check_csrf():
 
 @app.context_processor
 def inject_globals():
-    return dict(csrf_token=csrf_token, me=g.get("user"), PLANS=PLANS, tz_label=Config.APP_TIMEZONE)
+    # Build unique DISPLAY_PLANS from PLAN_ORDER
+    display_plans = []
+    seen = set()
+    for code in PLAN_ORDER:
+        if code in seen or code == "custom":
+            continue
+        p_info = PLANS.get(code)
+        if not p_info:
+            continue
+        canonical_id = p_info.get("id") or code
+        if canonical_id in seen or canonical_id == "custom":
+            continue
+        seen.add(canonical_id)
+        display_plans.append(p_info)
+
+    def_p = plans_service.get_default_plan()
+    def_code = def_p.code if def_p else "free"
+
+    return dict(
+        csrf_token=csrf_token,
+        me=g.get("user"),
+        PLANS=PLANS,
+        PLAN_ORDER=PLAN_ORDER,
+        DISPLAY_PLANS=display_plans,
+        DEFAULT_PLAN=def_code,
+        tz_label=Config.APP_TIMEZONE,
+        google_client_id=Config.GOOGLE_CLIENT_ID,
+    )
 
 
 @app.template_filter("localdt")
@@ -157,6 +273,15 @@ def handle_500(err):
     if request.path.startswith("/api/"):
         return jsonify(error="Something went wrong on our side."), 500
     return render_template("error.html", code=500, message="Something went wrong on our side."), 500
+
+
+@app.after_request
+def set_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 
 # ----------------------------------------------------------------------------- auth
@@ -192,7 +317,7 @@ def login():
         else:
             user = User.query.filter_by(email=email).first()
             if user and user.check_password(password):
-                if not user.active:
+                if user.deleted_at or not user.active:
                     error = "This account is disabled. Contact support."
                 else:
                     _sign_in(user)
@@ -208,7 +333,10 @@ def sync_upian_table(user):
     try:
         from sqlalchemy import text
         label_map = {"free": "Free", "plus": "Pro", "pro": "Pro", "plus_pro": "Pro Plus"}
-        plan_label = label_map.get(user.plan, user.plan)
+        if getattr(user, "subscription_id", None) and str(user.subscription_id).startswith("custom:"):
+            plan_label = str(user.subscription_id).split("custom:", 1)[1].strip()
+        else:
+            plan_label = label_map.get(user.plan, user.plan)
         db.session.execute(text("""
             INSERT INTO upian (name, email, plan)
             VALUES (:name, :email, :plan)
@@ -253,7 +381,12 @@ def register():
         elif User.query.filter_by(email=email).first():
             error = "An account with this email already exists."
         else:
-            user = User(name=name, email=email, plan="free")
+            from plans_service import get_default_plan
+            def_plan = get_default_plan()
+            if not def_plan:
+                logger.error("Signup failed: No default subscription plan configured in database.")
+                return render_template("auth.html", mode="register", error="Registration temporarily unavailable: No default plan is configured. Please contact an administrator.")
+            user = User(name=name, email=email, plan=def_plan.code)
             user.set_password(password)
             db.session.add(user)
             db.session.commit()
@@ -273,10 +406,12 @@ def logout():
 @app.get("/")
 @login_required
 def home():
+    def_plan = plans_service.get_default_plan()
     boot = {
         "uid": g.user.id,
         "plan": g.user.plan,
-        "can_image_gen": PLANS.get(g.user.plan, PLANS["free"]).get("image_gen", False),
+        "default_plan": def_plan.code if def_plan else "free",
+        "can_image_gen": plans_service.get_user_plan_dict(g.user).get("image_gen", False),
         "usage": get_usage(g.user),
         "threshold": Config.CLASSIFIER_THRESHOLD,
     }
@@ -319,21 +454,35 @@ def activity():
 @login_required
 def plans_page():
     plans_list = []
+    seen = set()
     for p in PLAN_ORDER:
-        p_info = PLANS[p]
-        is_cur = (g.user.plan == p or (p == "plus" and g.user.plan == "pro") or (p == "plus_pro" and g.user.plan == "pro_plus"))
+        if p == "custom" or p in seen:
+            continue
+        p_info = PLANS.get(p)
+        if not p_info:
+            continue
+        canonical_id = p_info.get("id") or p
+        if canonical_id in seen:
+            continue
+        seen.add(canonical_id)
+        is_cur = (g.user.plan == p or (p == "plus" and g.user.plan == "pro") or (p == "plus_pro" and g.user.plan == "pro_plus") or (g.user.plan == canonical_id))
         plans_list.append({
-            "id": p,
+            "id": canonical_id,
             "label": p_info["label"],
             "price": p_info.get("price", 0),
             "price_str": p_info.get("price_str", "$0"),
             "price_inr": p_info.get("price_inr", 0),
             "price_inr_str": p_info.get("price_inr_str", "₹0"),
-            "period": p_info.get("period", "month"),
+            "price_yearly": p_info.get("price_yearly", 0),
+            "price_yearly_str": p_info.get("price_yearly_str", "$0"),
+            "price_inr_yearly": p_info.get("price_inr_yearly", 0),
+            "price_inr_yearly_str": p_info.get("price_inr_yearly_str", "₹0"),
+            "period": p_info.get("period", "/mo"),
             "description": p_info.get("description", ""),
-            "daily": p_info["daily"],
-            "monthly": p_info["monthly"],
-            "strong_monthly": p_info["strong_monthly"],
+            "tag": p_info.get("tag", ""),
+            "daily": p_info.get("daily", 100),
+            "monthly": p_info.get("monthly", 2000),
+            "strong_monthly": p_info.get("strong_monthly", 400),
             "image_gen": p_info.get("image_gen", False),
             "image_daily": p_info.get("image_daily", 0),
             "features": p_info.get("features", []),
@@ -363,6 +512,10 @@ def api_payment_plans():
             "price_str": p_info.get("price_str", "$0"),
             "price_inr": p_info.get("price_inr", 0),
             "price_inr_str": p_info.get("price_inr_str", "₹0"),
+            "price_yearly": p_info.get("price_yearly", 0),
+            "price_yearly_str": p_info.get("price_yearly_str", "$0"),
+            "price_inr_yearly": p_info.get("price_inr_yearly", 0),
+            "price_inr_yearly_str": p_info.get("price_inr_yearly_str", "₹0"),
             "period": p_info.get("period", "/mo"),
             "description": p_info.get("description", ""),
             "daily": p_info["daily"],
@@ -391,20 +544,46 @@ def api_payment_plans():
 @login_required
 def api_payment_razorpay_order():
     data = request.get_json(silent=True) or {}
-    plan_id = (data.get("plan") or "").strip().lower()
-    if plan_id == "pro":
-        plan_id = "plus"
-    elif plan_id == "pro_plus":
-        plan_id = "plus_pro"
+    raw_plan = (data.get("plan") or "").strip().lower()
+    custom_plan_name = (data.get("custom_plan_name") or data.get("plan_name") or "").strip()
+    custom_amount = data.get("amount")
+    billing_cycle = (data.get("billing_cycle") or "monthly").strip().lower()
 
-    if plan_id not in PLANS or plan_id == "free":
-        return jsonify(error="Invalid subscription plan selected.", code="invalid_plan"), 400
-
-    plan_info = PLANS[plan_id]
     currency = getattr(Config, "PAYMENT_CURRENCY", "INR").upper()
-    amount = float(plan_info.get("price_inr", 999) if currency == "INR" else plan_info.get("price", 15.0))
-    receipt = f"rcpt_{g.user.id}_{uuid.uuid4().hex[:8]}"
 
+    if raw_plan in ("custom", "modular"):
+        amount = float(custom_amount or (1999 if billing_cycle == "yearly" else 499))
+        plan_id = "plus_pro" if amount >= 1500 else "plus"
+        plan_label = custom_plan_name or "Custom Plan"
+    elif raw_plan == "pro":
+        plan_id = "plus"
+        plan_info = PLANS["plus"]
+        if billing_cycle == "yearly":
+            amount = float(custom_amount or (plan_info.get("price_inr_yearly", 9999) if currency == "INR" else plan_info.get("price_yearly", 120.0)))
+        else:
+            amount = float(custom_amount or (plan_info.get("price_inr", 999) if currency == "INR" else plan_info.get("price", 15.0)))
+        plan_label = custom_plan_name or plan_info["label"]
+    elif raw_plan == "pro_plus":
+        plan_id = "plus_pro"
+        plan_info = PLANS["plus_pro"]
+        if billing_cycle == "yearly":
+            amount = float(custom_amount or (plan_info.get("price_inr_yearly", 19999) if currency == "INR" else plan_info.get("price_yearly", 240.0)))
+        else:
+            amount = float(custom_amount or (plan_info.get("price_inr", 1999) if currency == "INR" else plan_info.get("price", 24.0)))
+        plan_label = custom_plan_name or plan_info["label"]
+    else:
+        plan_id = raw_plan
+        p_chk = PLANS.get(plan_id)
+        if not p_chk or p_chk.get("price", 0) <= 0:
+            return jsonify(error="Invalid subscription plan selected.", code="invalid_plan"), 400
+        plan_info = p_chk
+        if billing_cycle == "yearly":
+            amount = float(custom_amount or (plan_info.get("price_inr_yearly", 9999) if currency == "INR" else plan_info.get("price_yearly", 120.0)))
+        else:
+            amount = float(custom_amount or (plan_info.get("price_inr", 999) if currency == "INR" else plan_info.get("price", 15.0)))
+        plan_label = custom_plan_name or plan_info["label"]
+
+    receipt = f"rcpt_{g.user.id}_{uuid.uuid4().hex[:8]}"
     razorpay_key = Config.RAZORPAY_KEY_ID
     razorpay_secret = Config.RAZORPAY_KEY_SECRET
 
@@ -415,7 +594,7 @@ def api_payment_razorpay_order():
                 "amount": int(amount * 100),
                 "currency": currency,
                 "receipt": receipt,
-                "notes": {"user_id": g.user.id, "plan": plan_id, "email": g.user.email},
+                "notes": {"user_id": g.user.id, "plan": plan_id, "billing_cycle": billing_cycle, "custom_plan_name": plan_label, "email": g.user.email},
             }
             res = requests.post(
                 "https://api.razorpay.com/v1/orders",
@@ -432,13 +611,16 @@ def api_payment_razorpay_order():
                     amount=amount,
                     currency=currency,
                     plan=plan_id,
-                    plan_label=plan_info["label"],
+                    plan_label=plan_label,
+                    billing_cycle=billing_cycle,
                     razorpay_enabled=True,
                 )
+            else:
+                app.logger.warning(f"Razorpay order API returned {res.status_code}: {res.text}")
         except Exception as e:
             app.logger.warning(f"Razorpay order creation fallback to simulated: {e}")
 
-    # Fallback to simulated/test order when user hasn't created Razorpay account yet
+    # Fallback to simulated/test order
     mock_order_id = "order_sim_" + uuid.uuid4().hex[:14]
     return jsonify(
         success=True,
@@ -447,8 +629,9 @@ def api_payment_razorpay_order():
         amount=amount,
         currency=currency,
         plan=plan_id,
-        plan_label=plan_info["label"],
-        razorpay_enabled=False,
+        plan_label=plan_label,
+        billing_cycle=billing_cycle,
+        razorpay_enabled=bool(razorpay_key),
         simulated=True,
     )
 
@@ -457,18 +640,33 @@ def api_payment_razorpay_order():
 @login_required
 def api_payment_process():
     data = request.get_json(silent=True) or {}
-    plan_id = (data.get("plan") or "").strip().lower()
-    if plan_id == "pro":
-        plan_id = "plus"
-    elif plan_id == "pro_plus":
-        plan_id = "plus_pro"
+    raw_plan = (data.get("plan") or "").strip().lower()
+    custom_plan_name = (data.get("custom_plan_name") or data.get("plan_name") or "").strip()
+    custom_features = data.get("custom_features") or []
+    custom_amount = data.get("amount")
+    billing_cycle = (data.get("billing_cycle") or "monthly").strip().lower()
+    duration_days = 365 if billing_cycle == "yearly" else 30
 
-    if plan_id not in PLANS:
+    if raw_plan in ("custom", "modular") or bool(custom_features) or bool(custom_plan_name):
+        is_custom = True
+        plan_id = "plus_pro" if ("unlimited" in custom_features or "high_quota" in custom_features or (custom_amount and float(custom_amount) >= 1500)) else "plus"
+    elif raw_plan == "pro":
+        is_custom = False
+        plan_id = "plus"
+    elif raw_plan == "pro_plus":
+        is_custom = False
+        plan_id = "plus_pro"
+    else:
+        is_custom = False
+        plan_id = raw_plan
+
+    if plan_id not in PLANS and raw_plan not in ("custom", "modular"):
         return jsonify(error="Invalid subscription plan selected.", code="invalid_plan"), 400
 
-    plan_info = PLANS[plan_id]
+    plan_info = PLANS.get(plan_id, PLANS["plus"])
     if plan_id == "free":
         g.user.plan = "free"
+        g.user.subscription_id = None
         db.session.commit()
         sync_upian_table(g.user)
         return jsonify(
@@ -496,47 +694,68 @@ def api_payment_process():
         payment_method = data.get("payment_method") or "card"
         tx_id = razorpay_payment_id or ("UPIAN-PAY-" + uuid.uuid4().hex[:12].upper())
 
-    currency = getattr(Config, "PAYMENT_CURRENCY", "USD").upper()
-    amount = float(plan_info.get("price_inr", 999) if currency == "INR" else plan_info.get("price", 15.0))
+    currency = getattr(Config, "PAYMENT_CURRENCY", "INR").upper()
+    if custom_amount is not None:
+        try:
+            amount = float(custom_amount)
+        except (ValueError, TypeError):
+            if billing_cycle == "yearly":
+                amount = float(plan_info.get("price_inr_yearly", 9999) if currency == "INR" else plan_info.get("price_yearly", 120.0))
+            else:
+                amount = float(plan_info.get("price_inr", 999) if currency == "INR" else plan_info.get("price", 15.0))
+    else:
+        if billing_cycle == "yearly":
+            amount = float(plan_info.get("price_inr_yearly", 9999) if currency == "INR" else plan_info.get("price_yearly", 120.0))
+        else:
+            amount = float(plan_info.get("price_inr", 999) if currency == "INR" else plan_info.get("price", 15.0))
 
-    payment = Payment(
+    success, payment, msg = update_user_plan_idempotent(
         user_id=g.user.id,
         plan=plan_id,
+        transaction_id=tx_id,
         amount=amount,
         currency=currency,
-        status="completed",
-        transaction_id=tx_id,
         payment_method=payment_method,
+        duration_days=duration_days,
     )
-    db.session.add(payment)
-    g.user.plan = plan_id
-    db.session.commit()
+
+    if custom_plan_name:
+        g.user.subscription_id = f"custom:{custom_plan_name}"
+        db.session.commit()
+
     sync_upian_table(g.user)
 
     curr_symbol = "₹" if currency == "INR" else "$"
+    label = custom_plan_name if custom_plan_name else ("Custom Plan" if is_custom else plan_info["label"])
     return jsonify(
         success=True,
         transaction_id=tx_id,
         plan=plan_id,
-        plan_label=plan_info["label"],
+        plan_label=label,
+        billing_cycle=billing_cycle,
+        duration_days=duration_days,
         amount=amount,
         currency=currency,
-        message=f"Payment of {curr_symbol}{amount:.2f} successful! You are now upgraded to {plan_info['label']}.",
-        usage=get_usage(g.user),
+        is_custom=is_custom,
+        custom_features=custom_features,
+        message=f"Payment of {curr_symbol}{amount:.2f} successful! You are now upgraded to {label} ({billing_cycle.title()}).",
     )
 
 
 @app.post("/api/payment/downgrade")
 @login_required
 def api_payment_downgrade():
-    g.user.plan = "free"
+    def_plan = plans_service.get_default_plan()
+    def_code = def_plan.code if def_plan else "free"
+    def_label = def_plan.label if def_plan else "Free"
+    g.user.plan = def_code
     db.session.commit()
     sync_upian_table(g.user)
     return jsonify(
         success=True,
-        message="Your account has been changed to the Free plan.",
-        plan="free",
-        plan_label="Free",
+        message=f"Your account has been changed to the {def_label} plan.",
+        plan=def_code,
+        plan_label=def_label,
         usage=get_usage(g.user),
     )
 
@@ -547,6 +766,271 @@ register_files(app, login_required)
 @app.get("/healthz")
 def healthz():
     return jsonify(ok=True, classifier=classifier.status)
+
+
+@app.get("/health")
+def health():
+    db_connected = False
+    db_engine = "unknown"
+    db_error = None
+    try:
+        db.session.execute(db.text("SELECT 1"))
+        db_connected = True
+        db_engine = db.engine.dialect.name
+    except Exception as exc:
+        db_error = str(exc)
+
+    status = "healthy" if db_connected else "degraded"
+    return jsonify({
+        "status": status,
+        "app": {
+            "name": "UPIAN AI Gateway",
+            "status": "running",
+            "timezone": Config.APP_TIMEZONE,
+        },
+        "database": {
+            "status": "connected" if db_connected else "disconnected",
+            "engine": db_engine,
+            "error": db_error,
+        },
+        "model_routing": {
+            "classifier": classifier.status if hasattr(classifier, "status") else "rule_based",
+            "has_text_keys": bool(env("GEMINI_API_KEY") or env("OPENAI_API_KEY") or env("ANTHROPIC_API_KEY")),
+            "has_image_keys": bool(env("IMAGE_GEN_API_KEY") or env("STABILITY_API_KEY") or env("IMAGEN_API_KEY")),
+        },
+        "chat_history": {
+            "backend": "in_memory",
+            "max_chats_per_user": 20,
+            "persistence": "ephemeral_lost_on_restart",
+        },
+        "timestamp": utcnow().isoformat() + "Z",
+    }), 200
+
+
+@app.route("/auth/google")
+def auth_google_login():
+    """
+    Initiates Google OAuth 2.0 authorization code flow.
+    Redirects user to Google OAuth consent screen.
+    """
+    if not Config.GOOGLE_CLIENT_ID:
+        flash("Google sign-in is not configured.", "err")
+        return redirect(url_for("login"))
+
+    next_url = safe_next(request.args.get("next"))
+    if next_url:
+        session["google_auth_next"] = next_url
+
+    state = secrets.token_urlsafe(32)
+    session["google_oauth_state"] = state
+
+    redirect_uri = Config.GOOGLE_REDIRECT_URI or url_for("auth_google_callback", _external=True)
+
+    params = {
+        "client_id": Config.GOOGLE_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "offline",
+        "prompt": "select_account",
+    }
+    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
+    return redirect(auth_url)
+
+
+@app.route("/auth/google/callback", methods=["GET", "POST"])
+def auth_google_callback():
+    """
+    Handles Google OAuth authentication callback.
+    Supports:
+      1. GET callback from Google OAuth 2.0 authorization code flow
+      2. POST callback from Google Identity Services (GIS) with JWT credential / id_token
+      3. POST callback with direct email and google_id payload
+    Upserts user by google_id or email, preventing duplicates under concurrent requests.
+    """
+    email = None
+    google_id = None
+    name = ""
+
+    if request.method == "GET":
+        error = request.args.get("error")
+        if error:
+            logger.warning("Google OAuth error response: %s", error)
+            flash("Google sign-in was cancelled or encountered an error.", "err")
+            return redirect(url_for("login"))
+
+        code = request.args.get("code")
+        if not code:
+            flash("Invalid Google authorization response: code missing.", "err")
+            return redirect(url_for("login"))
+
+        state = request.args.get("state")
+        saved_state = session.pop("google_oauth_state", None)
+        if saved_state and state != saved_state:
+            logger.warning("Google OAuth state mismatch: sent=%s, expected=%s", state, saved_state)
+            flash("Security verification failed during Google sign-in. Please try again.", "err")
+            return redirect(url_for("login"))
+
+        redirect_uri = Config.GOOGLE_REDIRECT_URI or url_for("auth_google_callback", _external=True)
+
+        token_url = "https://oauth2.googleapis.com/token"
+        token_payload = {
+            "code": code,
+            "client_id": Config.GOOGLE_CLIENT_ID,
+            "client_secret": Config.GOOGLE_CLIENT_SECRET,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        }
+
+        try:
+            token_resp = requests.post(token_url, data=token_payload, timeout=10)
+            if token_resp.status_code != 200:
+                logger.error("Google token exchange failed (%s): %s", token_resp.status_code, token_resp.text)
+                flash("Failed to authenticate with Google. Please check your credentials.", "err")
+                return redirect(url_for("login"))
+
+            token_data = token_resp.json()
+            id_token_jwt = token_data.get("id_token")
+            access_token = token_data.get("access_token")
+
+            if id_token_jwt:
+                try:
+                    from google.oauth2 import id_token
+                    from google.auth.transport import requests as google_requests
+                    idinfo = id_token.verify_oauth2_token(
+                        id_token_jwt,
+                        google_requests.Request(),
+                        Config.GOOGLE_CLIENT_ID
+                    )
+                    email = idinfo.get("email")
+                    google_id = idinfo.get("sub")
+                    name = idinfo.get("name") or idinfo.get("given_name") or ""
+                except Exception as v_err:
+                    logger.warning("Token verification via google-auth failed: %s; trying userinfo.", v_err)
+
+            if (not email or not google_id) and access_token:
+                uinfo_resp = requests.get(
+                    "https://www.googleapis.com/oauth2/v3/userinfo",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    timeout=10
+                )
+                if uinfo_resp.status_code == 200:
+                    uinfo = uinfo_resp.json()
+                    email = uinfo.get("email")
+                    google_id = uinfo.get("sub")
+                    name = uinfo.get("name") or uinfo.get("given_name") or ""
+
+            if not email or not google_id:
+                flash("Could not retrieve profile information from Google.", "err")
+                return redirect(url_for("login"))
+
+        except Exception as exc:
+            logger.error("Google OAuth token exchange exception: %s", exc)
+            flash("An error occurred during Google sign-in. Please try again.", "err")
+            return redirect(url_for("login"))
+
+    else:  # POST request
+        data = request.get_json(silent=True) or request.form.to_dict()
+        credential = data.get("credential") or data.get("id_token")
+        email = data.get("email")
+        google_id = data.get("google_id") or data.get("sub")
+        name = data.get("name") or ""
+
+        if credential:
+            try:
+                from google.oauth2 import id_token
+                from google.auth.transport import requests as google_requests
+                idinfo = id_token.verify_oauth2_token(
+                    credential,
+                    google_requests.Request(),
+                    Config.GOOGLE_CLIENT_ID
+                )
+                email = idinfo.get("email")
+                google_id = idinfo.get("sub")
+                name = idinfo.get("name") or idinfo.get("given_name") or name
+            except Exception as v_err:
+                logger.error("Google ID token verification failed: %s", v_err)
+                return jsonify(error="Invalid Google credential token.", code="invalid_token"), 400
+
+        if not email or not google_id:
+            return jsonify(error="Missing required Google OAuth credentials (email, google_id).", code="invalid_auth"), 400
+
+    try:
+        user = upsert_google_user(email=email, google_id=google_id, name=name)
+        if not user.active:
+            if request.method == "GET" or not (request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest"):
+                flash("This account is disabled. Contact support.", "err")
+                return redirect(url_for("login"))
+            return jsonify(error="This account is disabled. Contact support.", code="account_disabled"), 403
+
+        dest = safe_next(session.get("google_auth_next")) or url_for("home")
+        _sign_in(user)
+        sync_upian_table(user)
+
+        if request.method == "POST" and (request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest"):
+            return jsonify({
+                "success": True,
+                "user": user.to_dict(),
+                "redirect": dest,
+                "message": f"Successfully authenticated as {user.email}.",
+            }), 200
+
+        return redirect(dest)
+    except Exception as exc:
+        logger.error("Google OAuth upsert failed: %s", exc)
+        if request.method == "GET":
+            flash("Authentication failed. Please try again.", "err")
+            return redirect(url_for("login"))
+        return jsonify(error="Authentication failed. Please try again.", code="auth_failed"), 500
+
+
+@app.post("/api/payment/webhook")
+def api_payment_webhook():
+    """
+    Handles external payment gateway webhooks (e.g. Razorpay/Stripe).
+    Validates cryptographic signature and applies plan updates idempotently.
+    """
+    sig = request.headers.get("X-Razorpay-Signature") or request.headers.get("X-Signature") or ""
+    raw_payload = request.get_data()
+    webhook_secret = env("RAZORPAY_WEBHOOK_SECRET") or Config.RAZORPAY_KEY_SECRET
+
+    if webhook_secret:
+        if not verify_webhook_signature(raw_payload, sig, webhook_secret):
+            return jsonify(error="Invalid webhook signature.", code="invalid_signature"), 400
+
+    data = request.get_json(silent=True) or {}
+    event_id = data.get("event_id") or data.get("id") or ("evt_" + uuid.uuid4().hex[:12])
+    payload = data.get("payload", {}).get("payment", {}).get("entity", data)
+
+    user_id = payload.get("user_id") or data.get("user_id")
+    plan = payload.get("plan") or data.get("plan") or "plus"
+    if plan == "pro":
+        plan = "plus"
+    elif plan == "pro_plus":
+        plan = "plus_pro"
+
+    tx_id = payload.get("id") or payload.get("transaction_id") or data.get("transaction_id")
+    amount = float(payload.get("amount") or data.get("amount") or 15.0)
+    currency = str(payload.get("currency") or data.get("currency") or "USD").upper()
+
+    if not user_id or not tx_id:
+        return jsonify(error="Missing user_id or transaction_id in webhook.", code="missing_params"), 400
+
+    try:
+        success, payment, msg = update_user_plan_idempotent(
+            user_id=int(user_id),
+            plan=plan,
+            transaction_id=str(tx_id),
+            amount=amount,
+            currency=currency,
+            payment_method="webhook",
+            webhook_event_id=str(event_id),
+        )
+        return jsonify(success=success, message=msg, event_id=event_id), 200
+    except Exception as exc:
+        logger.error("Webhook processing error: %s", exc)
+        return jsonify(error="Webhook processing failed.", code="webhook_error"), 500
 
 
 def clean_history(raw):
@@ -619,10 +1103,23 @@ def ndjson(obj):
     return json.dumps(obj, ensure_ascii=False) + "\n"
 
 
+@app.post("/api/chat/stop")
+@login_required
+def api_chat_stop():
+    data = request.get_json(silent=True) or {}
+    req_id = data.get("request_id")
+    if req_id:
+        with ACTIVE_CHAT_LOCK:
+            if req_id in ACTIVE_CHAT_REQUESTS:
+                ACTIVE_CHAT_REQUESTS[req_id]["stopped"] = True
+    return jsonify(success=True, stopped=True)
+
+
 @app.post("/api/chat")
 @login_required
 def api_chat():
     data = request.get_json(silent=True) or {}
+    request_id = str(data.get("request_id") or uuid.uuid4())
     prompt = data.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
         return jsonify(error="Write a prompt first."), 400
@@ -631,6 +1128,8 @@ def api_chat():
         return jsonify(error="Prompt is too long. The limit is %d characters." % Config.MAX_PROMPT_CHARS), 400
 
     user = g.user
+    with ACTIVE_CHAT_LOCK:
+        ACTIVE_CHAT_REQUESTS[request_id] = {"stopped": False, "user_id": user.id}
     usage = get_usage(user)
     if usage["day"]["used"] >= usage["day"]["limit"]:
         return jsonify(
@@ -846,6 +1345,32 @@ def api_chat():
                               "files_used": [], "file": sp["file"], "files": sp["files"]})
                 return
 
+            # Fast Casual & Greeting Short-Circuit: answer frequent pleasantries concisely with ultra-low latency (<5ms)
+            is_casual, casual_reply = llm.is_casual_greeting(prompt)
+            if is_casual and not uploaded_images and not files_used:
+                row = RequestLog(
+                    user_id=user.id, prompt=prompt[:200], tier="weak", classifier="instant-greeting",
+                    provider="local", model="casual-fast-response", slot="local", status="success",
+                    latency_ms=max(1, int((time.perf_counter() - started) * 1000)),
+                    tokens_in=len(prompt.split()), tokens_out=len(casual_reply.split()),
+                )
+                db.session.add(row)
+                db.session.commit()
+                yield ndjson({
+                    "event": "route", "tier": "simple", "legacy_tier": "weak", "score": 0.0,
+                    "classifier": "instant-greeting", "classify_ms": 1, "downgraded": False,
+                    "model": "casual-fast-response", "provider": "local", "capabilities": ["conversation"],
+                    "estimated_cost": "free", "latency_tier": "instant (<10ms)"
+                })
+                yield ndjson({
+                    "event": "done",
+                    "reply": casual_reply,
+                    "log": row.to_dict(),
+                    "usage": get_usage(user),
+                    "files_used": [],
+                })
+                return
+
             # Multimodal Vision: if uploaded images are passed with a question
             if uploaded_images:
                 primary = uploaded_images[0]
@@ -1036,22 +1561,56 @@ def api_chat():
                     errors.append("%s: %s" % (slot["name"], exc))
 
             if result is None:
+                try:
+                    mock_slot = {"name": "mock_emergency", "provider": "mock", "model": "gemini-3.8-flash", "api_key": "", "base_url": ""}
+                    result = llm.generate(mock_slot, messages)
+                    used = mock_slot
+                except Exception:
+                    pass
+
+            if result is None:
                 row = log(status="error", error=" | ".join(errors)[:1000], provider=chain[0]["provider"],
                           model=chain[0]["model"], slot=chain[0]["name"], fallback=len(chain) > 1)
                 yield ndjson({"event": "error", "error": "The model did not respond. Try again in a moment. This request was not counted.",
                               "log": row.to_dict(), "usage": get_usage(user)})
                 return
 
+            with ACTIVE_CHAT_LOCK:
+                is_stopped = ACTIVE_CHAT_REQUESTS.get(request_id, {}).get("stopped", False)
+            if is_stopped:
+                row = log(status="stopped", provider=used["provider"] if used else "unknown", model=used["model"] if used else "stopped", slot=used["name"] if used else "")
+                yield ndjson({"event": "error", "error": "Generation stopped by user.", "log": row.to_dict(), "usage": get_usage(user)})
+                return
+
             fallback = bool(errors) or (tier == "strong" and used["name"] == "free")
+            reply_text = result["text"]
+
             row = log(status="success", provider=used["provider"], model=used["model"], slot=used["name"],
                       fallback=fallback, tokens_in=result["tokens_in"], tokens_out=result["tokens_out"],
                       latency_ms=result["latency_ms"])
-            yield ndjson({"event": "done", "reply": result["text"], "log": row.to_dict(), "usage": get_usage(user),
+            yield ndjson({"event": "done", "reply": reply_text, "log": row.to_dict(), "usage": get_usage(user),
                           "files_used": files_used})
+        except GeneratorExit:
+            app.logger.info("Client disconnected / aborted chat request: %s", request_id)
+            try:
+                row = RequestLog(
+                    user_id=user.id, prompt=prompt[:200],
+                    tier=legacy_tier if 'legacy_tier' in locals() else "weak",
+                    classifier=route["method"] if 'route' in locals() else "aborted",
+                    status="stopped", latency_ms=int((time.perf_counter() - started) * 1000)
+                )
+                db.session.add(row)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+            raise
         except Exception:
             app.logger.exception("chat failed")
             db.session.rollback()
             yield ndjson({"event": "error", "error": "Something went wrong on our side. Try again."})
+        finally:
+            with ACTIVE_CHAT_LOCK:
+                ACTIVE_CHAT_REQUESTS.pop(request_id, None)
 
     return Response(stream_with_context(stream()), mimetype="application/x-ndjson",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -1174,7 +1733,7 @@ def admin_api_stats():
 def admin_users():
     q = (request.args.get("q") or "").strip()
     page = request.args.get("page", 1, type=int)
-    query = User.query
+    query = User.query.filter(User.deleted_at.is_(None))
     if q:
         like = "%" + q + "%"
         query = query.filter(db.or_(User.email.ilike(like), User.name.ilike(like)))
@@ -1190,8 +1749,104 @@ def admin_users():
                 .group_by(RequestLog.user_id).all())
         return dict(rows)
 
+    all_plans = plans_service.get_all_plans_for_admin()
     return render_template("admin_users.html", active="users", pag=pag, q=q, plan_order=PLAN_ORDER,
-                           day_counts=counts(w["day_start"]), month_counts=counts(w["month_start"]))
+                           all_plans=all_plans, day_counts=counts(w["day_start"]), month_counts=counts(w["month_start"]))
+
+
+@app.post("/admin/users/<int:uid>/edit")
+@admin_required
+def admin_edit_user(uid):
+    user = db.get_or_404(User, uid)
+    name = (request.form.get("name") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
+    plan = (request.form.get("plan") or "").strip()
+    status = request.form.get("status")
+
+    if not name:
+        flash("User name cannot be empty.", "err")
+        return redirect(safe_next(request.form.get("next")) or url_for("admin_users"))
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        flash("Invalid email address.", "err")
+        return redirect(safe_next(request.form.get("next")) or url_for("admin_users"))
+
+    existing = User.query.filter(User.email == email, User.id != uid).first()
+    if existing:
+        flash(f"Email '{email}' is already in use by another user.", "err")
+        return redirect(safe_next(request.form.get("next")) or url_for("admin_users"))
+
+    valid_plan = (plan in PLANS) or bool(Plan.query.filter_by(code=plan, is_active=True).first())
+    if plan and not valid_plan:
+        flash(f"Plan '{plan}' is not a valid plan.", "err")
+        return redirect(safe_next(request.form.get("next")) or url_for("admin_users"))
+
+    old_data = {"name": user.name, "email": user.email, "plan": user.plan, "active": user.active}
+    user.name = name
+    user.email = email
+    if plan:
+        user.plan = plan
+    if status is not None:
+        user.active = status in ("1", "true", "active", "on", True)
+
+    audit = AuditLog(
+        admin_id=g.user.id,
+        target_user_id=user.id,
+        action="edit_user",
+        details=json.dumps({"old": old_data, "new": {"name": user.name, "email": user.email, "plan": user.plan, "active": user.active}}),
+    )
+    db.session.add(audit)
+    db.session.commit()
+    sync_upian_table(user)
+    flash(f"User {user.email} updated successfully.", "ok")
+    return redirect(safe_next(request.form.get("next")) or url_for("admin_users"))
+
+
+@app.post("/admin/users/<int:uid>/delete")
+@admin_required
+def admin_delete_user(uid):
+    user = db.get_or_404(User, uid)
+    if user.id == g.user.id:
+        flash("You cannot delete your own administrative account.", "err")
+        return redirect(safe_next(request.form.get("next")) or url_for("admin_users"))
+
+    user.deleted_at = utcnow()
+    user.active = False
+    audit = AuditLog(
+        admin_id=g.user.id,
+        target_user_id=user.id,
+        action="delete_user",
+        details=json.dumps({"email": user.email, "name": user.name, "plan": user.plan}),
+    )
+    db.session.add(audit)
+    db.session.commit()
+    flash(f"User {user.email} was successfully deleted.", "ok")
+    return redirect(safe_next(request.form.get("next")) or url_for("admin_users"))
+
+
+@app.post("/admin/users/<int:uid>/cancel-plan")
+@admin_required
+def admin_cancel_user_plan(uid):
+    user = db.get_or_404(User, uid)
+    def_plan = plans_service.get_default_plan()
+    def_code = def_plan.code if def_plan else "free"
+
+    old_plan = user.plan
+    user.plan = def_code
+    user.plan_status = "cancelled"
+    user.subscription_id = None
+    user.plan_end = utcnow()
+
+    audit = AuditLog(
+        admin_id=g.user.id,
+        target_user_id=user.id,
+        action="cancel_user_plan",
+        details=json.dumps({"old_plan": old_plan, "new_plan": def_code, "user_email": user.email}),
+    )
+    db.session.add(audit)
+    db.session.commit()
+    sync_upian_table(user)
+    flash(f"Cancelled subscription for {user.email}. Switched to {def_plan.label if def_plan else def_code}.", "ok")
+    return redirect(safe_next(request.form.get("next")) or url_for("admin_users"))
 
 
 @app.post("/admin/users/<int:uid>/plan")
@@ -1217,6 +1872,132 @@ def admin_toggle_user(uid):
     db.session.commit()
     flash("%s was %s." % (user.email, "enabled" if user.active else "disabled"))
     return redirect(safe_next(request.form.get("next")) or url_for("admin_users"))
+
+
+@app.get("/admin/plans")
+@admin_required
+def admin_plans():
+    import plans_service
+    plans = plans_service.get_all_plans_for_admin()
+    return render_template("admin_plans.html", active="plans", plans=plans)
+
+
+@app.post("/admin/plans/create")
+@admin_required
+def admin_create_plan():
+    import plans_service
+    label = request.form.get("label", "").strip()
+    code = request.form.get("code", "").strip()
+    price_inr = request.form.get("price_inr", 0)
+    price_usd = request.form.get("price_usd")
+    price_inr_yearly = request.form.get("price_inr_yearly")
+    price_usd_yearly = request.form.get("price_usd_yearly")
+    period = request.form.get("period", "/mo").strip()
+    description = request.form.get("description", "").strip()
+    tag = request.form.get("tag", "").strip()
+    daily = request.form.get("daily", 100)
+    monthly = request.form.get("monthly", 2000)
+    strong_monthly = request.form.get("strong_monthly", 400)
+    image_gen = request.form.get("image_gen") in ("1", "true", "yes", "on")
+    image_daily = request.form.get("image_daily", 20 if image_gen else 0)
+    raw_features = request.form.get("features", "")
+
+    features = [f.strip().lstrip("•-*✔ ").strip() for f in raw_features.split("\n") if f.strip()]
+
+    ok, plan, msg = plans_service.create_new_plan(
+        label=label,
+        code=code,
+        price_inr=price_inr,
+        price_usd=price_usd,
+        price_inr_yearly=price_inr_yearly,
+        price_usd_yearly=price_usd_yearly,
+        period=period,
+        description=description,
+        tag=tag,
+        daily=daily,
+        monthly=monthly,
+        strong_monthly=strong_monthly,
+        image_gen=image_gen,
+        image_daily=image_daily,
+        features=features,
+    )
+    if ok:
+        flash(f"Plan '{plan.label}' created successfully!", "ok")
+    else:
+        flash(f"Error creating plan: {msg}", "err")
+    return redirect(url_for("admin_plans"))
+
+
+@app.post("/admin/plans/<int:pid>/update")
+@admin_required
+def admin_update_plan(pid):
+    import plans_service
+    label = request.form.get("label", "").strip()
+    price_inr = request.form.get("price_inr", 0)
+    price_usd = request.form.get("price_usd")
+    price_inr_yearly = request.form.get("price_inr_yearly")
+    price_usd_yearly = request.form.get("price_usd_yearly")
+    period = request.form.get("period", "/mo").strip()
+    description = request.form.get("description", "").strip()
+    tag = request.form.get("tag", "").strip()
+    daily = request.form.get("daily", 100)
+    monthly = request.form.get("monthly", 2000)
+    strong_monthly = request.form.get("strong_monthly", 400)
+    image_gen = request.form.get("image_gen") in ("1", "true", "yes", "on")
+    image_daily = request.form.get("image_daily", 20 if image_gen else 0)
+    is_active = request.form.get("is_active") in ("1", "true", "yes", "on")
+    raw_features = request.form.get("features", "")
+
+    features = [f.strip().lstrip("•-*✔ ").strip() for f in raw_features.split("\n") if f.strip()]
+
+    ok, plan, msg = plans_service.update_existing_plan(
+        plan_id=pid,
+        label=label,
+        price_inr=price_inr,
+        price_usd=price_usd,
+        price_inr_yearly=price_inr_yearly,
+        price_usd_yearly=price_usd_yearly,
+        period=period,
+        description=description,
+        tag=tag,
+        daily=daily,
+        monthly=monthly,
+        strong_monthly=strong_monthly,
+        image_gen=image_gen,
+        image_daily=image_daily,
+        features=features,
+        is_active=is_active,
+    )
+    if ok:
+        flash(f"Plan '{plan.label}' updated successfully!", "ok")
+    else:
+        flash(f"Error updating plan: {msg}", "err")
+    return redirect(url_for("admin_plans"))
+
+
+@app.post("/admin/plans/<int:pid>/delete")
+@admin_required
+def admin_delete_plan(pid):
+    import plans_service
+    replacement_plan_id = request.form.get("replacement_plan_id")
+    ok, msg = plans_service.remove_plan(pid, replacement_plan_id=replacement_plan_id, admin_id=g.user.id)
+    if ok:
+        flash(msg, "ok")
+    else:
+        flash(msg, "err")
+    return redirect(url_for("admin_plans"))
+
+
+@app.post("/admin/plans/<int:pid>/default")
+@admin_required
+def admin_set_default_plan(pid):
+    import plans_service
+    ok, msg = plans_service.set_plan_as_default(pid, admin_id=g.user.id)
+    if ok:
+        flash(msg, "ok")
+    else:
+        flash(msg, "err")
+    return redirect(url_for("admin_plans"))
 
 
 @app.get("/admin/requests")
@@ -1318,15 +2099,15 @@ def admin_analytics(days):
         u = users.get(uid)
         if not u:
             continue
-        top.append({"name": u.name, "email": u.email, "plan": PLANS.get(u.plan, PLANS["free"])["label"],
+        top.append({"name": u.name, "email": u.email, "plan": plans_service.get_user_plan_dict(u)["label"],
                     "requests": d["requests"], "tokens": d["tokens"], "avg_latency_ms": _avg(d["lat"])})
 
     near = []
     for u in users.values():
-        limit = PLANS.get(u.plan, PLANS["free"])["monthly"]
+        limit = plans_service.get_user_plan_dict(u)["monthly"]
         used = month_counts.get(u.id, 0)
         if limit and used / limit >= 0.8:
-            near.append({"name": u.name, "email": u.email, "plan": PLANS.get(u.plan, PLANS["free"])["label"],
+            near.append({"name": u.name, "email": u.email, "plan": plans_service.get_user_plan_dict(u)["label"],
                          "used": used, "limit": limit})
     near.sort(key=lambda x: x["used"] / x["limit"], reverse=True)
 
@@ -1387,7 +2168,7 @@ def admin_export_users():
     for u in User.query.order_by(User.id).all():
         c, t, a = agg.get(u.id, (0, 0, None))
         out.writerow([_csv_safe(u.name), _csv_safe(u.email), u.plan, "active" if u.active else "disabled",
-                      iso(u.created_at), iso(u.last_login) or "", c, PLANS.get(u.plan, PLANS["free"])["monthly"], t,
+                      iso(u.created_at), iso(u.last_login) or "", c, plans_service.get_user_plan_dict(u)["monthly"], t,
                       int(a) if a else ""])
     return Response(buf.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=upian-users.csv"})

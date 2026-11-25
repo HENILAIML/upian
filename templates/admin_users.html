@@ -12,34 +12,53 @@
 <div class="panel flush">
   <div class="table-wrap">
   <table class="tbl">
-    <thead><tr><th>User</th><th>Plan</th><th class="r">Today</th><th class="r">This month</th><th>Joined</th><th>Last sign-in</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>User</th><th>Plan</th><th class="r">Today</th><th class="r">This month</th><th>Joined</th><th>Last sign-in</th><th>Status</th><th class="r">Actions</th></tr></thead>
     <tbody>
     {% for u in pag.items %}
-      {% set pl = PLANS.get(u.plan) or PLANS['free'] %}
+      {% set pl = PLANS.get(u.plan) or PLANS.get(DEFAULT_PLAN) or {'label': u.plan, 'daily': 20, 'monthly': 300} %}
       <tr>
-        <td><div class="strong-text">{{ u.name }}{% if u.is_admin %} <span class="tag neutral">admin</span>{% endif %}</div><div class="dim small">{{ u.email }}</div></td>
         <td>
-          <form method="post" action="{{ url_for('admin_set_plan', uid=u.id) }}" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="next" value="{{ request.full_path }}">
-            <select name="plan" aria-label="Plan for {{ u.email }}" onchange="this.form.submit()">
-              {% for p in plan_order %}<option value="{{ p }}" {{ 'selected' if u.plan == p else '' }}>{{ PLANS[p].label }}</option>{% endfor %}
-            </select>
-          </form>
+          <div class="strong-text">{{ u.name }}{% if u.is_admin %} <span class="tag neutral">admin</span>{% endif %}</div>
+          <div class="dim small">{{ u.email }}</div>
         </td>
-        <td class="r">{{ day_counts.get(u.id, 0) }} of {{ pl.daily }}</td>
-        <td class="r">{{ month_counts.get(u.id, 0) }} of {{ pl.monthly }}</td>
+        <td>
+          <span class="tag {{ 'neutral' if u.plan == DEFAULT_PLAN else 'weak' }}">{{ pl.label if pl is mapping else u.plan }}</span>
+          {% if u.plan_status and u.plan_status != 'active' %}
+            <span class="dim small" style="display:block; font-size:10px;">({{ u.plan_status }})</span>
+          {% endif %}
+        </td>
+        <td class="r">{{ day_counts.get(u.id, 0) }} of {{ pl.daily if pl is mapping else 20 }}</td>
+        <td class="r">{{ month_counts.get(u.id, 0) }} of {{ pl.monthly if pl is mapping else 300 }}</td>
         <td class="dim">{{ u.created_at|localdt('%d %b %Y') }}</td>
         <td class="dim">{{ u.last_login|localdt }}</td>
-        <td>{% if u.active %}<span class="tag weak">Active</span>{% else %}<span class="tag err">Disabled</span>{% endif %}</td>
-        <td class="r">
-          {% if u.id != me.id %}
-          <form method="post" action="{{ url_for('admin_toggle_user', uid=u.id) }}" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="next" value="{{ request.full_path }}">
-            <button class="btn sm {{ 'danger' if u.active else '' }}" type="submit">{{ 'Disable' if u.active else 'Enable' }}</button>
-          </form>
+        <td>
+          {% if u.active %}
+            <span class="tag weak">Active</span>
+          {% else %}
+            <span class="tag err">Disabled</span>
           {% endif %}
+        </td>
+        <td class="r">
+          <div style="display:inline-flex; align-items:center; gap:6px; justify-content:flex-end; flex-wrap:wrap;">
+            <button type="button" class="btn sm" onclick='openEditUserModal({{ u.to_dict()|tojson }})' title="Edit user details">Edit</button>
+            <form method="post" action="{{ url_for('admin_cancel_user_plan', uid=u.id) }}" class="inline" onsubmit="return confirm('Cancel subscription for {{ u.email }}? This will switch them to the default plan.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <button class="btn sm" type="submit" title="Cancel plan/subscription">Cancel Plan</button>
+            </form>
+            {% if u.id != me.id %}
+            <form method="post" action="{{ url_for('admin_toggle_user', uid=u.id) }}" class="inline" onsubmit="return confirm('Are you sure you want to {{ 'disable' if u.active else 'enable' }} {{ u.email }}?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <button class="btn sm" type="submit">{{ 'Disable' if u.active else 'Enable' }}</button>
+            </form>
+            <form method="post" action="{{ url_for('admin_delete_user', uid=u.id) }}" class="inline" onsubmit="return confirm('Permanently delete {{ u.email }}? This soft-deletes the user and revokes login access.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <button class="btn sm danger" type="submit" title="Delete user">Delete</button>
+            </form>
+            {% endif %}
+          </div>
         </td>
       </tr>
     {% else %}
@@ -50,4 +69,73 @@
   </div>
 </div>
 {% include "_pager.html" %}
+
+<!-- ========================================================================= -->
+<!-- EDIT USER MODAL                                                           -->
+<!-- ========================================================================= -->
+<div id="editUserModal" class="modal-backdrop" hidden style="position:fixed;inset:0;background:rgba(18,18,18,0.55);backdrop-filter:blur(3px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:#fff;border:2px solid var(--ink);border-radius:16px;box-shadow:6px 6px 0 var(--ink);width:100%;max-width:480px;padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1.5px solid var(--line2);padding-bottom:12px;">
+      <h3 style="margin:0;font:800 20px var(--display);color:var(--ink);">Edit User</h3>
+      <button type="button" onclick="closeEditUserModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--mute);">&times;</button>
+    </div>
+
+    <form id="editUserForm" method="post" action="" onsubmit="return confirm('Save updates to this user account?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Full Name *</label>
+        <input type="text" id="edit-user-name" name="name" required style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Email Address *</label>
+        <input type="email" id="edit-user-email" name="email" required style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Subscription Plan</label>
+        <select id="edit-user-plan" name="plan" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+          {% for p in plan_order %}
+          {% set pl_opt = PLANS.get(p) %}
+          <option value="{{ p }}">{{ pl_opt.label if pl_opt else p }} (₹{{ (pl_opt.price_inr|int) if (pl_opt and pl_opt.price_inr is defined) else '0' }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="margin-bottom:18px;">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Account Status</label>
+        <select id="edit-user-status" name="status" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+          <option value="1">Active</option>
+          <option value="0">Disabled</option>
+        </select>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button type="button" class="btn" onclick="closeEditUserModal()">Cancel</button>
+        <button type="submit" class="btn primary">Save User</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openEditUserModal(u) {
+  document.getElementById('editUserForm').action = '/admin/users/' + u.id + '/edit';
+  document.getElementById('edit-user-name').value = u.name || '';
+  document.getElementById('edit-user-email').value = u.email || '';
+  document.getElementById('edit-user-plan').value = u.plan || '{{ DEFAULT_PLAN }}';
+  document.getElementById('edit-user-status').value = u.active ? '1' : '0';
+  document.getElementById('editUserModal').hidden = false;
+}
+function closeEditUserModal() {
+  document.getElementById('editUserModal').hidden = true;
+}
+
+window.addEventListener('click', function(e) {
+  var modal = document.getElementById('editUserModal');
+  if (e.target === modal) closeEditUserModal();
+});
+</script>
 {% endblock %}

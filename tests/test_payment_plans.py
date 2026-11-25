@@ -40,9 +40,9 @@ def test_plans_configuration():
     assert PLANS["plus_pro"]["label"] == "Pro Plus"
     assert PLANS["plus_pro"]["price"] == 39
     assert PLANS["plus_pro"]["image_gen"] is True
-    assert PLANS["free"]["image_daily"] == 1
-    assert PLANS["plus"]["image_daily"] == 10
-    assert PLANS["plus_pro"]["image_daily"] == 25
+    assert PLANS["free"]["image_daily"] == 0
+    assert PLANS["plus"]["image_daily"] == 20
+    assert PLANS["plus_pro"]["image_daily"] == 30
 
 
 def test_api_payment_plans_endpoint(auth_client):
@@ -107,7 +107,7 @@ def test_payment_process_upgrade_to_pro_plus(auth_client):
         assert user.plan == "plus_pro"
 
 
-def test_free_plan_allows_one_daily_image_attempt_without_faking_provider(auth_client):
+def test_free_plan_blocks_image_generation_and_requires_upgrade(auth_client):
     headers = {"X-CSRF-Token": TEST_CSRF, "Content-Type": "application/json"}
     # Switch back to free
     auth_client.post("/api/payment/downgrade", headers=headers, json={})
@@ -120,7 +120,76 @@ def test_free_plan_allows_one_daily_image_attempt_without_faking_provider(auth_c
     )
     assert res.status_code == 200
     text_data = res.get_data(as_text=True)
-    # With no configured generation key this attempt reports the configuration issue,
-    # and does not count as a generated image.
-    assert "generate images right now" in text_data
-    assert '"images": {"used": 0, "limit": 1}' in text_data
+    # Free users are blocked from image generation with upgrade notice
+    assert "upgrade_required" in text_data or "Free users cannot generate" in text_data
+
+
+def test_custom_checkbox_feature_selection(auth_client):
+    headers = {"X-CSRF-Token": TEST_CSRF, "Content-Type": "application/json"}
+    custom_features = ["core", "image_gen", "reasoning", "ocr_pdf"]
+    res = auth_client.post(
+        "/api/payment/process",
+        headers=headers,
+        json={
+            "plan": "custom",
+            "custom_features": custom_features,
+            "amount": 747.0,
+            "payment_method": "upi",
+        },
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["success"] is True
+    assert data["is_custom"] is True
+    assert data["amount"] == 747.0
+    assert data["custom_features"] == custom_features
+    assert "Custom" in data["plan_label"]
+
+    with app.app_context():
+        user = User.query.filter_by(email="test_subscriber@upian.local").first()
+        assert user.plan in ("plus", "plus_pro")
+        pay = Payment.query.filter_by(transaction_id=data["transaction_id"]).first()
+        assert pay is not None
+        assert pay.amount == 747.0
+        assert pay.status == "completed"
+
+
+def test_plans_page_renders_with_checkboxes(auth_client):
+    """Test that the plans page loads clean subscription tiers with Back to Chat and without custom builder."""
+    res = auth_client.get("/plans")
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+    assert "Back to Chat" in html
+    assert "Choose Your Intelligence Tier" in html
+    assert "page-card-free" in html or "Free" in html
+    assert "page-card-plus" in html or "Pro" in html
+    assert "Build Your Own Custom Plan" not in html
+
+
+def test_custom_plan_activates_image_generation_and_reasoning(auth_client):
+    """Test that selecting image_gen in custom plan enables image generation capability."""
+    headers = {"X-CSRF-Token": TEST_CSRF, "Content-Type": "application/json"}
+    # Downgrade first to free
+    auth_client.post("/api/payment/downgrade", headers=headers, json={})
+
+    # Upgrade via custom checkbox selection with image_gen
+    res = auth_client.post(
+        "/api/payment/process",
+        headers=headers,
+        json={
+            "plan": "custom",
+            "custom_features": ["core", "image_gen"],
+            "amount": 598.0,
+            "payment_method": "card",
+        },
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["success"] is True
+
+    # User's plan must be upgraded so image generation is allowed
+    with app.app_context():
+        user = User.query.filter_by(email="test_subscriber@upian.local").first()
+        assert user.plan in ("plus", "plus_pro", "custom")
+        plan_info = PLANS.get(user.plan, PLANS["free"])
+        assert plan_info.get("image_gen") is True

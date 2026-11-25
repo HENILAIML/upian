@@ -5,7 +5,7 @@ import re
 import uuid
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template_string, request, send_file, send_from_directory, session
+from flask import Blueprint, g, jsonify, render_template_string, request, send_file, send_from_directory, session
 
 import extractor
 import image_gen
@@ -21,6 +21,17 @@ MAX_IMAGE_BYTES = 20 * 1024 * 1024
 
 def _get_uid():
     return session.get("uid") or "anon"
+
+
+def _can_access_user_files(user_id):
+    current_uid = session.get("uid")
+    if g.get("user") and getattr(g.user, "role", None) == "admin":
+        return True
+    if str(user_id) == "anon":
+        return True
+    if current_uid is not None and str(current_uid) == str(user_id):
+        return True
+    return False
 
 
 def _read_image_request():
@@ -226,6 +237,8 @@ def api_multimodal_upload():
 
 @vision_bp.route("/api/files/<user_id>/thumb/<token>", methods=["GET"])
 def api_file_thumb(user_id, token):
+    if not _can_access_user_files(user_id):
+        return "Access denied", 403
     if not re.fullmatch(r"[0-9a-fA-F]{32}", token):
         return "Invalid token", 400
     user_dir = (Path(Config.UPLOAD_DIR) / str(user_id)).resolve()
@@ -237,6 +250,8 @@ def api_file_thumb(user_id, token):
 
 @vision_bp.route("/api/files/<user_id>/download/<token>", methods=["GET"])
 def api_file_download(user_id, token):
+    if not _can_access_user_files(user_id):
+        return "Access denied", 403
     if not re.fullmatch(r"[0-9a-fA-F]{32}", token):
         return "Invalid token", 400
     user_dir = (Path(Config.UPLOAD_DIR) / str(user_id)).resolve()

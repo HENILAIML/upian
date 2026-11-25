@@ -495,13 +495,39 @@ _PDF_FONT = {}
 
 
 def _pdf_fonts():
-    """Register a Unicode TTF if one exists (so ₹, €, Hindi etc. print); otherwise use built-in Helvetica."""
+    """Register a Unicode TTF if one exists (so ₹, €, Hindi, Gujarati etc. print); otherwise use built-in Helvetica."""
     if _PDF_FONT:
         return _PDF_FONT["v"]
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     here = os.path.dirname(os.path.abspath(__file__))
+
+    # Priority 1: Bundled cross-platform Indic/Gujarati font
+    bundled_reg = os.path.join(here, "fonts", "UpianIndic.ttf")
+    bundled_bold = os.path.join(here, "fonts", "UpianIndic-Bold.ttf")
+    if os.path.exists(bundled_reg) and os.path.exists(bundled_bold):
+        try:
+            pdfmetrics.registerFont(TTFont("UpianSans", bundled_reg))
+            pdfmetrics.registerFont(TTFont("UpianSans-Bold", bundled_bold))
+            _PDF_FONT["v"] = ("UpianSans", "UpianSans-Bold", True)
+            return _PDF_FONT["v"]
+        except Exception:
+            pass
+
+    # Priority 2: Windows Nirmala UI (full Indic & Gujarati coverage)
+    win_nirmala = "C:\\Windows\\Fonts\\Nirmala.ttc"
+    if os.path.exists(win_nirmala):
+        try:
+            pdfmetrics.registerFont(TTFont("UpianSans", win_nirmala, subfontIndex=0))
+            pdfmetrics.registerFont(TTFont("UpianSans-Bold", win_nirmala, subfontIndex=1))
+            _PDF_FONT["v"] = ("UpianSans", "UpianSans-Bold", True)
+            return _PDF_FONT["v"]
+        except Exception:
+            pass
+
+    # Priority 3: Linux / Mac / fallback pairs
     pairs = [
+        ("/usr/share/fonts/truetype/noto/NotoSansGujarati-Regular.ttf", "/usr/share/fonts/truetype/noto/NotoSansGujarati-Bold.ttf"),
         (os.path.join(here, "fonts", "DejaVuSans.ttf"), os.path.join(here, "fonts", "DejaVuSans-Bold.ttf")),
         ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
         ("C:\\Windows\\Fonts\\arial.ttf", "C:\\Windows\\Fonts\\arialbd.ttf"),

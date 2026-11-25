@@ -14,25 +14,34 @@
         <h1>My files</h1>
         <p class="sub">Upload documents, datasets, and spreadsheets. Use “Attach files” in chat to query them directly, extract insights, or have AI write new documents.</p>
       </div>
-      <div class="storage-card">
-        <div class="storage-card-header">
-          <div class="storage-label">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
-              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
-            </svg>
-            <span>Storage Quota</span>
+      <div class="page-head-actions">
+        <a href="{{ url_for('home') }}" class="btn-head-back-chat" title="Return to Chat Conversation">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span>← Back to Chat</span>
+        </a>
+        <div class="storage-card">
+          <div class="storage-card-header">
+            <div class="storage-label">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+              </svg>
+              <span>Storage Quota</span>
+            </div>
+            <span class="storage-usage"><b>{{ used_mb }}</b> / {{ quota_mb }} MB</span>
           </div>
-          <span class="storage-usage"><b>{{ used_mb }}</b> / {{ quota_mb }} MB</span>
-        </div>
-        <div class="storage-bar-track">
-          {% set pct = [(((used_mb|float) / (quota_mb|float or 1)) * 100)|round(1), 100]|min %}
-          <div class="storage-bar-fill {% if pct > 90 %}danger{% elif pct > 75 %}warn{% endif %}" style="width: {{ pct }}%"></div>
-        </div>
-        <div class="storage-card-footer">
-          <span>Max {{ max_files }} files</span>
-          <span>{{ pct }}% used</span>
+          <div class="storage-bar-track">
+            {% set pct = [(((used_mb|float) / (quota_mb|float or 1)) * 100)|round(1), 100]|min %}
+            <div class="storage-bar-fill {% if pct > 90 %}danger{% elif pct > 75 %}warn{% endif %}" style="width: {{ pct }}%"></div>
+          </div>
+          <div class="storage-card-footer">
+            <span>Max {{ max_files }} files</span>
+            <span>{{ pct }}% used</span>
+          </div>
         </div>
       </div>
     </header>

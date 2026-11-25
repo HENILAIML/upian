@@ -14,7 +14,10 @@ if not os.environ.get("SSL_CERT_FILE") or not os.path.exists(os.environ["SSL_CER
     os.environ["SSL_CERT_FILE"] = _valid_cert
 
 from datetime import timedelta
+import logging
 from dotenv import load_dotenv
+
+logger = logging.getLogger("upian.config")
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
@@ -57,6 +60,10 @@ PLANS = {
         "price_str": "$0",
         "price_inr": 0,
         "price_inr_str": "₹0",
+        "price_yearly": 0,
+        "price_yearly_str": "$0",
+        "price_inr_yearly": 0,
+        "price_inr_yearly_str": "₹0",
         "period": "forever",
         "description": "Essential multimodal gateway with daily community quota.",
         "daily": env_int("FREE_DAILY", 20),
@@ -81,6 +88,10 @@ PLANS = {
         "price_str": "$15",
         "price_inr": 999,
         "price_inr_str": "₹999",
+        "price_yearly": 150,
+        "price_yearly_str": "$150",
+        "price_inr_yearly": 9999,
+        "price_inr_yearly_str": "₹9,999",
         "period": "/month",
         "description": "Priority speed, higher quota & AI image generation.",
         "daily": env_int("PLUS_DAILY", 100),
@@ -104,6 +115,10 @@ PLANS = {
         "price_str": "$39",
         "price_inr": 2499,
         "price_inr_str": "₹2,499",
+        "price_yearly": 390,
+        "price_yearly_str": "$390",
+        "price_inr_yearly": 24999,
+        "price_inr_yearly_str": "₹24,999",
         "period": "/month",
         "description": "Maximum reasoning quota, unlimited image generation & dedicated speed.",
         "daily": env_int("PRO_DAILY", 300),
@@ -121,7 +136,7 @@ PLANS = {
         ],
     },
 }
-# Aliases for flexibilty: 'pro' -> 'plus', 'pro_plus' -> 'plus_pro'
+# Aliases for flexibility
 PLANS["pro"] = PLANS["plus"]
 PLANS["pro_plus"] = PLANS["plus_pro"]
 
@@ -144,9 +159,9 @@ def _build_slots():
                 "model": model,
                 "base_url": env(prefix + "_BASE_URL"),
             }
-    # Direct Gemini Key (defaults to gemini-3.8-flash if not specified)
+    # Direct Gemini Key (defaults to gemini-3.5-flash-lite if not specified)
     key = env("GEMINI_API_KEY")
-    model = env("GEMINI_MODEL", "gemini-3.8-flash") or "gemini-3.8-flash"
+    model = env("GEMINI_MODEL", "gemini-3.5-flash-lite") or "gemini-3.5-flash-lite"
     if key:
         slots["free"] = {
             "name": "free",
@@ -186,17 +201,46 @@ def _model_path():
     return path if os.path.isabs(path) else os.path.join(BASE_DIR, path)
 
 
-class Config:
-    SECRET_KEY = env("SECRET_KEY", "dev-secret-change-me")
-    # Database: SQLite fallback, with native PostgreSQL support for DATABASE_URL
+def _get_database_uri():
     _raw_db = env("DATABASE_URL")
-    if _raw_db:
-        if _raw_db.startswith("postgres://"):
-            _raw_db = _raw_db.replace("postgres://", "postgresql://", 1)
-        SQLALCHEMY_DATABASE_URI = _raw_db
-    else:
-        SQLALCHEMY_DATABASE_URI = "sqlite:///" + os.path.join(BASE_DIR, "upian.db")
+    if not _raw_db:
+        return "sqlite:///" + os.path.join(BASE_DIR, "upian.db")
+    if _raw_db.startswith("postgres://"):
+        _raw_db = _raw_db.replace("postgres://", "postgresql://", 1)
+
+    if env_bool("ALLOW_SQLITE_FALLBACK", True):
+        try:
+            import psycopg2
+            from urllib.parse import urlparse
+            p = urlparse(_raw_db)
+            conn = psycopg2.connect(
+                dbname=p.path.lstrip("/"),
+                user=p.username,
+                password=p.password,
+                host=p.hostname or "localhost",
+                port=p.port or 5432,
+                connect_timeout=1
+            )
+            conn.close()
+            return _raw_db
+        except Exception as exc:
+            logger.warning("PostgreSQL primary database is unreachable (%s). Falling back to SQLite.", exc)
+            return "sqlite:///" + os.path.join(BASE_DIR, "upian.db")
+    return _raw_db
+
+
+class Config:
+    BASE_DIR = BASE_DIR
+    SECRET_KEY = env("SECRET_KEY", "dev-secret-change-me")
+    DATABASE_URL = env("DATABASE_URL") or _get_database_uri()
+    SQLALCHEMY_DATABASE_URI = _get_database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_timeout": 5,
+    }
+    ALLOW_SQLITE_FALLBACK = env_bool("ALLOW_SQLITE_FALLBACK", True)
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = env_bool("COOKIE_SECURE", False)
@@ -206,6 +250,12 @@ class Config:
     RAZORPAY_KEY_ID = env("RAZORPAY_KEY_ID", "")
     RAZORPAY_KEY_SECRET = env("RAZORPAY_KEY_SECRET", "")
     PAYMENT_CURRENCY = env("PAYMENT_CURRENCY", "USD") # "USD" or "INR"
+
+    # Google OAuth
+    GOOGLE_CLIENT_ID = env("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET = env("GOOGLE_CLIENT_SECRET", "")
+    GOOGLE_PROJECT_ID = env("GOOGLE_PROJECT_ID", "upian-515405")
+    GOOGLE_REDIRECT_URI = env("GOOGLE_REDIRECT_URI", "")
 
     HOST = env("HOST", "127.0.0.1")
     PORT = env_int("PORT", 5000)
@@ -227,9 +277,10 @@ class Config:
     COMPLEXITY_COMPLEX_MIN = env_float("COMPLEXITY_COMPLEX_MIN", 0.70)
 
     # LLM calls & Tier Models
-    GEMINI_MEDIUM_MODEL = env("GEMINI_MEDIUM_MODEL", "gemini-3.8-flash")
-    GEMINI_COMPLEX_MODEL = env("GEMINI_COMPLEX_MODEL", "gemini-3.8-pro")
-    LLM_TIMEOUT = env_int("LLM_TIMEOUT", 60)
+    GEMINI_MEDIUM_MODEL = env("GEMINI_MEDIUM_MODEL", "gemini-3.5-flash-lite")
+    GEMINI_COMPLEX_MODEL = env("GEMINI_COMPLEX_MODEL", "gemini-2.5-pro")
+    LLM_CONNECT_TIMEOUT = env_int("LLM_CONNECT_TIMEOUT", 3)
+    LLM_TIMEOUT = env_int("LLM_TIMEOUT", 35)
     MAX_OUTPUT_TOKENS = env_int("MAX_OUTPUT_TOKENS", 4096)
     MAX_PROMPT_CHARS = env_int("MAX_PROMPT_CHARS", 6000)
     HISTORY_TURNS = env_int("HISTORY_TURNS", 8)
@@ -260,3 +311,71 @@ class Config:
     SUPPORTED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
     SUPPORTED_DOC_EXT = {".pdf", ".docx", ".xlsx", ".txt", ".csv"}
     EXTRACT_FORMATS = ("pdf", "docx", "xlsx", "csv", "txt", "json")
+
+
+def validate_config():
+    """
+    Validates application configuration at startup.
+    - If a required configuration item is missing or invalid, logs a clear ERROR naming the missing item.
+    - If optional configuration items (like external API keys) are empty, logs a WARN.
+    Returns (is_valid: bool, errors: list[str], warnings: list[str]).
+    """
+    errors = []
+    warnings = []
+
+    # 1. Required: SECRET_KEY
+    secret_key = Config.SECRET_KEY
+    if not secret_key:
+        errors.append("Missing required environment variable: SECRET_KEY")
+    elif secret_key in ("dev-secret-change-me", "change-this-to-a-secure-random-secret-key-in-production"):
+        warnings.append("SECRET_KEY is using a default development value. Set a strong random secret in production.")
+
+    # 2. Required: HOST
+    host = Config.HOST
+    if not host:
+        errors.append("Missing required environment variable: HOST")
+
+    # 3. Required: PORT
+    port = Config.PORT
+    if not isinstance(port, int) or port < 1 or port > 65535:
+        errors.append(f"Invalid PORT value '{port}': Must be an integer between 1 and 65535.")
+
+    # 4. Required: DATABASE_URL / SQLALCHEMY_DATABASE_URI
+    db_uri = Config.SQLALCHEMY_DATABASE_URI
+    if not db_uri:
+        errors.append("Missing required configuration: DATABASE_URL (or SQLALCHEMY_DATABASE_URI)")
+    elif not (db_uri.startswith("postgresql://") or db_uri.startswith("sqlite:///")):
+        warnings.append(f"DATABASE_URL protocol '{db_uri.split('://')[0]}' may not be supported. Recommended: postgresql:// or sqlite:///")
+
+    # 5. Optional Text Generation Keys
+    text_keys = [
+        ("GEMINI_API_KEY", env("GEMINI_API_KEY")),
+        ("OPENAI_API_KEY", env("OPENAI_API_KEY")),
+        ("ANTHROPIC_API_KEY", env("ANTHROPIC_API_KEY")),
+    ]
+    has_text_key = any(bool(val) for _, val in text_keys)
+    if not has_text_key:
+        warnings.append("No text-generation API key configured (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY). App will run in mock/simulation mode.")
+
+    # 6. Optional Image Generation Keys (Strictly separate from text keys)
+    image_keys = [
+        ("IMAGE_GEN_API_KEY", env("IMAGE_GEN_API_KEY")),
+        ("STABILITY_API_KEY", env("STABILITY_API_KEY")),
+        ("IMAGEN_API_KEY", env("IMAGEN_API_KEY")),
+    ]
+    has_image_key = any(bool(val) for _, val in image_keys)
+    image_provider = env("IMAGE_GEN_PROVIDER", "auto").lower()
+    if not has_image_key and image_provider != "mock":
+        warnings.append("No dedicated image-generation API key configured (IMAGE_GEN_API_KEY, STABILITY_API_KEY, IMAGEN_API_KEY). Image generation will return an unconfigured notice or mock asset.")
+
+    # 7. Optional Google OAuth
+    if not Config.GOOGLE_CLIENT_ID:
+        warnings.append("No GOOGLE_CLIENT_ID configured. Google OAuth sign-in will be unavailable.")
+
+    for err in errors:
+        logger.error("[CONFIG ERROR] %s", err)
+    for warn in warnings:
+        logger.warning("[CONFIG WARN] %s", warn)
+
+    is_valid = len(errors) == 0
+    return is_valid, errors, warnings

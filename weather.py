@@ -2,12 +2,15 @@
 
 The AI model never writes these numbers. Dates that no source can know (e.g. December 2026 when today is
 November 2026) are refused with a clear message instead of being invented.
+Supports multilingual queries (Gujarati, Gujlish, Hindi, English).
 """
+import os
 import re
 import threading
 import time
 from datetime import date, datetime, timedelta
 
+import certifi
 import requests
 
 from marketdata import DataUnavailable
@@ -32,25 +35,111 @@ CODES = {0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast", 4
          82: "Heavy showers", 85: "Snow showers", 86: "Snow showers", 95: "Thunderstorm", 96: "Thunderstorm, hail",
          99: "Thunderstorm, hail"}
 
-_WEATHER = re.compile(r"\b(weather|temperature|temp|forecast|rainfall|rain)\b", re.I)
+GUJ_CODES = {
+    0: "સ્વચ્છ આકાશ (Clear sky)",
+    1: "મુખ્યત્વે સ્વચ્છ (Mainly clear)",
+    2: "અંશતઃ વાદળછાયું (Partly cloudy)",
+    3: "વાદળછાયું (Overcast)",
+    45: "ધુમ્મસ (Fog)",
+    48: "ગાઢ ધુમ્મસ (Dense fog)",
+    51: "ઝરમર વરસાદ (Light drizzle)",
+    53: "ધીમો વરસાદ (Drizzle)",
+    55: "ભારે ઝરમર (Heavy drizzle)",
+    61: "હળવો વરસાદ (Light rain)",
+    63: "વરસાદ (Rain)",
+    65: "ભારે વરસાદ (Heavy rain)",
+    71: "બરફવર્ષા (Light snow)",
+    80: "હળવા ઝાપટાં (Showers)",
+    81: "વરસાદી ઝાપટાં (Showers)",
+    82: "ભારે ઝાપટાં (Heavy showers)",
+    95: "ગાજવીજ સાથે વરસાદ (Thunderstorm)",
+    96: "કરા સાથે વરસાદ (Thunderstorm with hail)",
+    99: "ભારે વાવાઝોડું (Heavy thunderstorm)",
+}
+
+GUJARATI_CITIES = {
+    "સુરત": "Surat", "surat": "Surat",
+    "અમદાવાદ": "Ahmedabad", "ahmedabad": "Ahmedabad", "amdavad": "Ahmedabad",
+    "રાજકોટ": "Rajkot", "rajkot": "Rajkot",
+    "વડોદરા": "Vadodara", "vadodara": "Vadodara", "baroda": "Vadodara", "બરોડા": "Vadodara",
+    "ગાંધીનગર": "Gandhinagar", "gandhinagar": "Gandhinagar",
+    "ભાવનગર": "Bhavnagar", "bhavnagar": "Bhavnagar",
+    "જામનગર": "Jamnagar", "jamnagar": "Jamnagar",
+    "જુનાગઢ": "Junagadh", "junagadh": "Junagadh", "જૂનાગઢ": "Junagadh",
+    "આણંદ": "Anand", "anand": "Anand",
+    "નવસારી": "Navsari", "navsari": "Navsari",
+    "વલસાડ": "Valsad", "valsad": "Valsad",
+    "ભરૂચ": "Bharuch", "bharuch": "Bharuch",
+    "મહેસાણા": "Mehsana", "mehsana": "Mehsana",
+    "પાટણ": "Patan", "patan": "Patan",
+    "પોરબંદર": "Porbandar", "porbandar": "Porbandar",
+    "મોરબી": "Morbi", "morbi": "Morbi",
+    "સુરેન્દ્રનગર": "Surendranagar", "surendranagar": "Surendranagar",
+    "અમરેલી": "Amreli", "amreli": "Amreli",
+    "હિંમતનગર": "Himatnagar", "himatnagar": "Himatnagar",
+    "ગોધરા": "Godhra", "godhra": "Godhra",
+    "ભુજ": "Bhuj", "bhuj": "Bhuj", "કચ્છ": "Kutch", "kutch": "Kutch",
+    "મુંબઈ": "Mumbai", "mumbai": "Mumbai", "bombay": "Mumbai",
+    "દિલ્હી": "Delhi", "delhi": "Delhi", "new delhi": "New Delhi",
+    "બેંગ્લોર": "Bengaluru", "bangalore": "Bengaluru", "bengaluru": "Bengaluru",
+    "પુણે": "Pune", "pune": "Pune",
+    "હૈદરાબાદ": "Hyderabad", "hyderabad": "Hyderabad",
+    "ચેન્નાઈ": "Chennai", "chennai": "Chennai", "madras": "Chennai",
+    "કોલકાતા": "Kolkata", "kolkata": "Kolkata", "calcutta": "Kolkata",
+    "જયપુર": "Jaipur", "jaipur": "Jaipur",
+    "લખનૌ": "Lucknow", "lucknow": "Lucknow",
+    "ગોવા": "Goa", "goa": "Goa",
+    "ઈન્દોર": "Indore", "indore": "Indore",
+}
+
+_WEATHER = re.compile(
+    r"\b(weather|temperature|temp|temps|forecast|rainfall|rain|havaman|havaaman|tapman|taapman|varsad|varsaad|mosam|mausam|barish|aagahi|vatavaran)\b"
+    r"|(?:હવામાન|તાપમાન|વરસાદ|મોસમ|આગાહી|વાતાવરણ|ઠંડી|ગરમી|તડકો)"
+    r"|(?:मौसम|तापमान|बारिश|वर्षा)",
+    re.I
+)
 _NOT_DATA = re.compile(r"\b(why|explain|reason|cause|causes|climate change|affect\w*)\b", re.I)
 _STOP = set("""weather temperature temp temps forecast report data climate rain rainfall for in of at the a an me my give show
 tell what whats what's is are how today tomorrow tonight now current curret last past next previous days day week weeks
 hourly daily please city india table chart list format with and also details detail information info want need get see
 from to on will be going like it excel pdf word csv docx json html txt md ppt pptx powerpoint spreadsheet file
 january february march april may june july august september october november december jan feb mar apr jun jul aug sep sept
-oct nov dec year years month months can you do tell about""".split())
+oct nov dec year years month months can you do tell about
+havaman havaaman tapman taapman varsad varsaad mosam mausam barish aagahi vatavaran
+kevu kevo keva khatu raheshe rehse chhe che chho cho su shu mane maru tamaru tamne
+aaje aje kaale kale ma nu no ni na thi vishe batavo kaho aapo apo batao bataiye kaisa kaise kaisi rahega rahegi padse padshe
+હવામાન તાપમાન વરસાદ મોસમ આગાહી વાતાવરણ કેવું કેવો કેવા રહેશે છે શું મને મારું તમારું તમને આજે કાલે માં નું નો ની ના થી વિશે બતાવો કહો આપો પડશે
+""".split())
 
 
 def detect(prompt):
+    if not prompt or not isinstance(prompt, str):
+        return False
     return bool(_WEATHER.search(prompt)) and not _NOT_DATA.search(prompt)
 
 
 def extract_city(prompt):
-    p = re.sub(r"\b\d{4}-\d{2}-\d{2}\b|\d+", " ", prompt.lower())
-    words = [w.strip(".'-") for w in re.findall(r"[a-z][a-z'.-]*", p)]
+    """Returns (city_name, is_default_flag). Defaults to Surat if city is omitted."""
+    if not prompt:
+        return "Surat", True
+
+    p = prompt.strip()
+    p_lower = p.lower()
+
+    # 1. Exact match in known Gujarati and Indian cities
+    for guj, eng in GUJARATI_CITIES.items():
+        if guj in p or re.search(r"\b" + re.escape(guj) + r"\b", p_lower):
+            return eng, False
+
+    # 2. Match general Latin word cities
+    clean = re.sub(r"\b\d{4}-\d{2}-\d{2}\b|\d+", " ", p_lower)
+    words = [w.strip(".'-") for w in re.findall(r"[a-z][a-z'.-]*", clean)]
     keep = [w for w in words if w and w not in _STOP]
-    return " ".join(keep).title() or None
+    if keep:
+        return " ".join(keep).title(), False
+
+    # 3. Default to Surat if user didn't specify a city
+    return "Surat", True
 
 
 def detect_range(prompt, today):
@@ -73,13 +162,13 @@ def detect_range(prompt, today):
     if m:
         n = max(1, int(m.group(1)))
         return today, today + timedelta(days=n - 1)
-    if re.search(r"\b(?:last|past)\s+week\b", p):
+    if re.search(r"\b(?:last|past)\s+week\b|(?:ગયા\s*અઠવાડિયે)", p):
         return today - timedelta(days=6), today
-    if re.search(r"\bnext\s+week\b", p):
+    if re.search(r"\bnext\s+week\b|(?:આવતા\s*અઠવાડિયે)", p):
         return today, today + timedelta(days=6)
-    if re.search(r"\btomorrow\b", p):
+    if re.search(r"\b(?:tomorrow|kaale|kale|kal)\b|(?:કાલે|આવતીકાલે)", p):
         return today + timedelta(days=1), today + timedelta(days=1)
-    if re.search(r"\b(?:today|now|current\w*)\b", p):
+    if re.search(r"\b(?:today|now|current\w*|aaje|aje|aaj)\b|(?:આજે|હાલમાં|અત્યારે)", p):
         return today, today
     return today, today + timedelta(days=6)  # default: this week's outlook
 
@@ -123,7 +212,13 @@ def _valid_iso(s):
 
 def _get_json(url, params):
     try:
-        resp = requests.get(url, params=params, timeout=(5, 15), headers={"User-Agent": "UpianAI/1.0"})
+        resp = requests.get(
+            url,
+            params=params,
+            timeout=(5, 15),
+            headers={"User-Agent": "UpianAI/1.0"},
+            verify=certifi.where()
+        )
     except requests.RequestException as exc:
         raise DataUnavailable("network error: %s" % str(exc)[:100])
     if resp.status_code >= 400:
@@ -174,7 +269,7 @@ def fetch_daily(lat, lon, start, end, today):
             continue
         rain = d["precipitation_sum"][i]
         code = d["weather_code"][i]
-        rows.append((datetime.strptime(day, "%Y-%m-%d").date(), tmax, tmin, rain, CODES.get(code, "n/a")))
+        rows.append((datetime.strptime(day, "%Y-%m-%d").date(), tmax, tmin, rain, code))
     if not rows:
         raise DataUnavailable("the weather service has no values for these dates yet")
     with _LOCK:
@@ -184,9 +279,7 @@ def fetch_daily(lat, lon, start, end, today):
 
 def report(prompt, today=None):
     today = today or date.today()
-    city = extract_city(prompt)
-    if not city:
-        raise NeedInfo("Which city? For example: `weather in Surat for the last 10 days`.")
+    city, is_default = extract_city(prompt)
     start, end = detect_range(prompt, today)
     if end > today + timedelta(days=MAX_AHEAD):
         if start > today + timedelta(days=MAX_AHEAD):
@@ -202,10 +295,35 @@ def report(prompt, today=None):
     rows = fetch_daily(lat, lon, start, end, today)
 
     fmt = lambda v: "n/a" if v is None else "%.1f" % v
-    lines = ["### Weather in %s: %s to %s" % (place, rows[0][0].isoformat(), rows[-1][0].isoformat()), "",
-             "| Date | Max (°C) | Min (°C) | Rain (mm) | Condition |", "|---|---|---|---|---|"]
-    for d, tmax, tmin, rain, cond in rows:
-        lines.append("| %s | %s | %s | %s | %s |" % (d.strftime("%a, %d %b %Y"), fmt(tmax), fmt(tmin), fmt(rain), cond))
+    is_guj = bool(
+        re.search(r"[\u0A80-\u0AFF]", prompt)
+        or re.search(r"\b(havaman|havaaman|varsad|tapman|kevu|chhe|aaje|kaale)\b", prompt.lower())
+    )
+
+    if is_guj:
+        lines = [
+            f"### ⛅ {place} નું લાઈવ હવામાન ({rows[0][0].strftime('%d-%m-%Y')} થી {rows[-1][0].strftime('%d-%m-%Y')})\n",
+            "| તારીખ (Date) | મહત્તમ તાપમાન (Max °C) | લઘુત્તમ તાપમાન (Min °C) | વરસાદ (Rain mm) | સ્થિતિ (Condition) |",
+            "|---|---|---|---|---|"
+        ]
+        for d, tmax, tmin, rain, code in rows:
+            cond = GUJ_CODES.get(code, CODES.get(code, "n/a"))
+            lines.append("| %s | %s | %s | %s | %s |" % (d.strftime("%a, %d %b %Y"), fmt(tmax), fmt(tmin), fmt(rain), cond))
+        if is_default:
+            lines.insert(0, "> ℹ️ *કયા ચોક્કસ શહેરનું હવામાન જાણવું છે? (દા.ત. `અમદાવાદનું હવામાન` કે `મુંબઈનું હવામાન`). અહીં મુખ્ય શહેર **સુરત (Surat)** નું આજનું લાઈવ હવામાન છે:*\n")
+    else:
+        lines = [
+            "### ⛅ Weather in %s: %s to %s" % (place, rows[0][0].isoformat(), rows[-1][0].isoformat()),
+            "",
+            "| Date | Max (°C) | Min (°C) | Rain (mm) | Condition |",
+            "|---|---|---|---|---|"
+        ]
+        for d, tmax, tmin, rain, code in rows:
+            cond = CODES.get(code, "n/a")
+            lines.append("| %s | %s | %s | %s | %s |" % (d.strftime("%a, %d %b %Y"), fmt(tmax), fmt(tmin), fmt(rain), cond))
+        if is_default:
+            lines.insert(0, "> ℹ️ *Which city would you like? (e.g. `weather in Mumbai`). Showing real live weather for **Surat**:*\n")
+
     slug = "weather-%s-%s-to-%s" % (re.sub(r"[^a-z0-9]+", "-", city.lower()).strip("-"), rows[0][0].isoformat(),
                                     rows[-1][0].isoformat())
     return {"markdown": "\n".join(lines), "slug": slug, "source": "Open-Meteo weather"}

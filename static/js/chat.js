@@ -91,7 +91,7 @@
     if (!history.length) {
       thread.innerHTML = emptyHTML;
     } else {
-      history.forEach(function (m) { addMessage(m.role, m.content, null, m.files_used, m.extra); });
+      history.forEach(function (m) { addMessage(m.role, m.content, m.meta, m.files_used, m.extra, m.versions, m.versionIndex); });
       document.querySelectorAll('.msg .meta').forEach(function (el) { el.remove(); });
     }
     uploadedFiles = [];
@@ -129,16 +129,15 @@
   var currentStreamReader = null;
   var currentPendingMsg = null;
   var currentLiveRow = null;
+  var currentRequestId = null;
 
   function setBusyState(isBusy) {
     busy = isBusy;
-    var stopBar = $('stop-bar');
     if (isBusy) {
       sendBtn.disabled = false;
       sendBtn.classList.add('stop-mode');
       sendBtn.innerHTML = '<span class="stop-sq">■</span> <span>Stop</span>';
       sendBtn.title = 'Stop generating (Esc)';
-      if (stopBar) stopBar.style.display = 'flex';
     } else {
       resetSendBtn();
     }
@@ -150,16 +149,28 @@
     sendBtn.innerHTML = 'Send';
     sendBtn.title = 'Send message';
     sendBtn.disabled = false;
-    var stopBar = $('stop-bar');
-    if (stopBar) stopBar.style.display = 'none';
     currentAbortController = null;
     currentStreamReader = null;
     currentPendingMsg = null;
     currentLiveRow = null;
+    currentRequestId = null;
   }
 
   function stopCurrentPrompt() {
     if (!busy) return;
+    if (currentRequestId) {
+      try {
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/chat/stop', JSON.stringify({ request_id: currentRequestId }));
+        } else {
+          api('/api/chat/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ request_id: currentRequestId })
+          });
+        }
+      } catch (e) {}
+    }
     if (currentAbortController) {
       try { currentAbortController.abort(); } catch (e) {}
     }
@@ -167,8 +178,17 @@
       try { currentStreamReader.cancel(); } catch (e) {}
     }
     if (currentPendingMsg && currentPendingMsg.isConnected) {
-      currentPendingMsg.remove();
-      addMessage('assistant', '_Generation stopped by user._');
+      var bodyEl = currentPendingMsg.querySelector('.body');
+      var partial = currentPendingMsg._partialText || '';
+      var stoppedNotice = (partial ? renderMd(partial) : '<em>Generation stopped by user.</em>') +
+        ' <span class="dim small" style="margin-left:8px;font-weight:700;color:var(--bad);">(stopped)</span>';
+      if (bodyEl) {
+        bodyEl.innerHTML = stoppedNotice;
+        bodyEl.classList.remove('pending-text');
+      }
+      currentPendingMsg._text = (partial || 'Generation stopped by user.') + ' (stopped)';
+      history.push({ role: 'assistant', content: currentPendingMsg._text, stopped: true });
+      save();
     }
     if (currentLiveRow && currentLiveRow.stop) {
       currentLiveRow.stop();
@@ -346,15 +366,27 @@
       }
       return;
     }
+    var vbtn = e.target.closest('.version-btn');
+    if (vbtn) {
+      var msg = vbtn.closest('.msg');
+      var userMsg = msg.classList.contains('user') ? msg : (msg._userMsg || msg.previousElementSibling);
+      while (userMsg && !userMsg.classList.contains('user')) {
+        userMsg = userMsg.previousElementSibling;
+      }
+      if (!userMsg || !userMsg._versions || userMsg._versions.length <= 1) return;
+      var curIdx = (userMsg._versionIndex != null) ? userMsg._versionIndex : (userMsg._versions.length - 1);
+      if (vbtn.classList.contains('prev')) {
+        if (curIdx > 0) switchMessageVersion(userMsg, curIdx - 1);
+      } else if (vbtn.classList.contains('next')) {
+        if (curIdx < userMsg._versions.length - 1) switchMessageVersion(userMsg, curIdx + 1);
+      }
+      return;
+    }
     var ed = e.target.closest('.edit-msg-btn');
     if (ed) {
       var msg = ed.closest('.msg');
       if (msg && msg._text) {
-        input.value = msg._text;
-        input.style.height = 'auto';
-        input.style.height = Math.min(input.scrollHeight, 200) + 'px';
-        input.focus();
-        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showInlineEdit(msg);
       }
       return;
     }
@@ -707,9 +739,21 @@
   }
 
   var CREATE = ['txt', 'md', 'docx', 'pdf', 'html', 'json'];
-  function actionsBlock(role, filesUsed, content) {
+  function actionsBlock(role, filesUsed, content, versions, verIdx) {
+    var verNav = '';
+    if (versions && versions.length > 1) {
+      var curI = (verIdx != null) ? verIdx : (versions.length - 1);
+      var prevDis = curI <= 0 ? ' disabled' : '';
+      var nextDis = curI >= versions.length - 1 ? ' disabled' : '';
+      verNav = '<span class="version-nav">' +
+        '<button type="button" class="version-btn prev"' + prevDis + ' title="Previous version">&lt;</button> ' +
+        '<span class="ver-text">' + (curI + 1) + '/' + versions.length + '</span> ' +
+        '<button type="button" class="version-btn next"' + nextDis + ' title="Next version">&gt;</button>' +
+      '</span>';
+    }
     if (role === 'user') {
       return '<div class="actions user-actions">' +
+        verNav +
         '<button type="button" class="btn sm copy-msg-btn" title="Copy prompt to clipboard">' +
           '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> ' +
           '<span>Copy</span>' +
@@ -718,7 +762,7 @@
           '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg> ' +
           '<span>Retry</span>' +
         '</button>' +
-        '<button type="button" class="btn sm edit-msg-btn" title="Edit this prompt in the chatbar">' +
+        '<button type="button" class="btn sm edit-msg-btn" title="Edit this prompt">' +
           '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg> ' +
           '<span>Edit</span>' +
         '</button>' +
@@ -730,6 +774,7 @@
     if (mdTables(content).length) fmts.push('csv');
     fmts.push('xlsx', 'docx', 'pdf', 'html', 'json');
     return used + '<div class="actions dl">' +
+      verNav +
       '<button type="button" class="btn sm copy-msg-btn" title="Copy answer to clipboard">' +
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> ' +
         '<span>Copy</span>' +
@@ -745,6 +790,225 @@
       '<div class="dl-menu" hidden>' + fmts.map(function (x) {
         return '<button type="button" class="btn sm" data-save="' + x + '">' + (x === 'xlsx' ? 'Excel' : '.' + x) + '</button>';
       }).join('') + '</div></div>';
+  }
+
+  function showInlineEdit(userMsg) {
+    if (busy) return;
+    var bodyEl = userMsg.querySelector('.body');
+    if (!bodyEl) return;
+    if (userMsg.querySelector('.edit-msg-form')) return;
+    var origText = userMsg._text || '';
+
+    var editWrap = document.createElement('div');
+    editWrap.className = 'edit-msg-form';
+    editWrap.style.cssText = 'margin-top:8px;display:flex;flex-direction:column;gap:8px;width:100%;';
+    editWrap.innerHTML = '<textarea class="edit-msg-textarea" rows="3" style="width:100%;box-sizing:border-box;border-radius:10px;padding:8px 12px;font:inherit;background:#fff;color:var(--ink);border:2px solid var(--ink);resize:vertical;"></textarea>' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
+        '<button type="button" class="btn sm cancel-edit-btn">Cancel</button>' +
+        '<button type="button" class="btn sm primary submit-edit-btn">Save & Submit</button>' +
+      '</div>';
+    var ta = editWrap.querySelector('textarea');
+    ta.value = origText;
+    bodyEl.style.display = 'none';
+    userMsg.insertBefore(editWrap, bodyEl.nextSibling);
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+
+    editWrap.querySelector('.cancel-edit-btn').addEventListener('click', function () {
+      editWrap.remove();
+      bodyEl.style.display = '';
+    });
+
+    editWrap.querySelector('.submit-edit-btn').addEventListener('click', function () {
+      var newPrompt = ta.value.trim();
+      if (!newPrompt) return;
+      editWrap.remove();
+      bodyEl.style.display = '';
+      if (newPrompt === origText) return;
+      resubmitEditedPrompt(userMsg, newPrompt);
+    });
+  }
+
+  async function resubmitEditedPrompt(userMsg, newPrompt) {
+    if (busy) return;
+    var origText = userMsg._text || '';
+
+    if (!userMsg._versions || !userMsg._versions.length) {
+      var nextAst = userMsg.nextElementSibling;
+      while (nextAst && !nextAst.classList.contains('assistant') && !nextAst.classList.contains('user')) nextAst = nextAst.nextElementSibling;
+      userMsg._versions = [{
+        prompt: origText,
+        reply: nextAst ? nextAst._text : '',
+        meta: nextAst ? nextAst._meta : null,
+        extra: nextAst ? nextAst._extra : null,
+        files_used: nextAst ? nextAst._filesUsed : null
+      }];
+      userMsg._versionIndex = 0;
+    }
+
+    userMsg._versions.push({
+      prompt: newPrompt,
+      reply: null,
+      meta: null,
+      extra: null,
+      files_used: null
+    });
+    userMsg._versionIndex = userMsg._versions.length - 1;
+    userMsg._text = newPrompt;
+    userMsg.querySelector('.body').innerHTML = '<p>' + esc(newPrompt).replace(/\n/g, '<br>') + '</p>';
+
+    var oldActions = userMsg.querySelector('.actions.user-actions');
+    if (oldActions) {
+      oldActions.outerHTML = actionsBlock('user', null, newPrompt, userMsg._versions, userMsg._versionIndex);
+    }
+
+    var nextAst = userMsg.nextElementSibling;
+    while (nextAst && !nextAst.classList.contains('assistant') && !nextAst.classList.contains('user')) nextAst = nextAst.nextElementSibling;
+    if (!nextAst || !nextAst.classList.contains('assistant')) {
+      nextAst = addPending();
+      userMsg.parentNode.insertBefore(nextAst, userMsg.nextSibling);
+    } else {
+      nextAst.innerHTML = '<div class="who assistant-who"><span class="bot-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> Upian AI</span></div>' +
+        '<div class="body pending-text"><span class="dots"><i></i><i></i><i></i></span><span class="ptext">Choosing a model for edited prompt</span></div>';
+    }
+    nextAst._userMsg = userMsg;
+    currentPendingMsg = nextAst;
+
+    var prevNodes = [];
+    var sib = userMsg.previousElementSibling;
+    while (sib) {
+      if (sib.classList.contains('msg') && (sib.classList.contains('user') || sib.classList.contains('assistant'))) {
+        prevNodes.unshift(sib);
+      }
+      sib = sib.previousElementSibling;
+    }
+    var prior = prevNodes.map(function (m) {
+      return { role: m.classList.contains('user') ? 'user' : 'assistant', content: m._text || '' };
+    });
+    prior = carryPrior().concat(prior.slice(-8));
+
+    currentRequestId = 'req_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 8);
+    currentAbortController = new AbortController();
+    setBusyState(true);
+    var row = addLivePending(newPrompt);
+    currentLiveRow = row;
+
+    try {
+      var res = await api('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: currentAbortController.signal,
+        body: JSON.stringify({
+          prompt: newPrompt,
+          history: prior,
+          request_id: currentRequestId
+        })
+      });
+      if (!res.ok) {
+        var j = await res.json().catch(function () { return {}; });
+        if (j.usage) renderUsage(j.usage);
+        throw new Error(j.error || 'Request failed (' + res.status + ')');
+      }
+      var reader = res.body.getReader(), dec = new TextDecoder(), buf = '', finished = false;
+      currentStreamReader = reader;
+      for (;;) {
+        var chunk = await reader.read();
+        if (chunk.done) break;
+        buf += dec.decode(chunk.value, { stream: true });
+        var i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          var line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+          if (!line) continue;
+          var ev = JSON.parse(line);
+          if (ev.event === 'route') onRoute(ev, nextAst, row);
+          else if (ev.event === 'done') {
+            finished = true;
+            var extra = { image: ev.image, vision: ev.vision, data: ev.data };
+            userMsg._versions[userMsg._versionIndex].reply = ev.reply;
+            userMsg._versions[userMsg._versionIndex].log = ev.log;
+            userMsg._versions[userMsg._versionIndex].extra = extra;
+            userMsg._versions[userMsg._versionIndex].files_used = ev.files_used;
+
+            nextAst.className = 'msg assistant';
+            nextAst._text = ev.reply;
+            nextAst._meta = ev.log;
+            nextAst._extra = extra;
+            nextAst._filesUsed = ev.files_used;
+            nextAst._userMsg = userMsg;
+            nextAst.innerHTML = '<div class="who assistant-who"><span class="bot-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> Upian AI</span></div>' +
+              '<div class="body">' + renderMd(ev.reply) + '</div>' + actionsBlock('assistant', ev.files_used, ev.reply, userMsg._versions, userMsg._versionIndex);
+
+            // Sync with history
+            for (var hi = 0; hi < history.length; hi++) {
+              if (history[hi].role === 'user' && history[hi].versions && history[hi].versions.length === userMsg._versions.length) {
+                history[hi].content = newPrompt;
+                history[hi].versions = userMsg._versions;
+                history[hi].versionIndex = userMsg._versionIndex;
+                if (history[hi + 1] && history[hi + 1].role === 'assistant') {
+                  history[hi + 1].content = ev.reply;
+                  history[hi + 1].meta = ev.log;
+                  history[hi + 1].extra = extra;
+                  history[hi + 1].files_used = ev.files_used;
+                }
+                break;
+              }
+            }
+            save();
+            replaceLive(row, ev.log);
+            renderUsage(ev.usage);
+          } else if (ev.event === 'error') {
+            finished = true;
+            onError(ev, nextAst, row);
+          }
+        }
+      }
+    } catch (e) {
+      if (currentAbortController && currentAbortController.signal.aborted) return;
+      onError({ error: e.message }, nextAst, row);
+    } finally {
+      row.stop();
+      resetSendBtn();
+    }
+  }
+
+  function switchMessageVersion(userMsg, newIdx) {
+    if (!userMsg || !userMsg._versions || newIdx < 0 || newIdx >= userMsg._versions.length) return;
+    userMsg._versionIndex = newIdx;
+    var v = userMsg._versions[newIdx];
+    userMsg._text = v.prompt;
+    var userBody = userMsg.querySelector('.body');
+    if (userBody) userBody.innerHTML = '<p>' + esc(v.prompt).replace(/\n/g, '<br>') + '</p>';
+    var userActs = userMsg.querySelector('.actions.user-actions');
+    if (userActs) {
+      userActs.outerHTML = actionsBlock('user', null, v.prompt, userMsg._versions, newIdx);
+    }
+
+    var nextAst = userMsg.nextElementSibling;
+    while (nextAst && !nextAst.classList.contains('assistant') && !nextAst.classList.contains('user')) nextAst = nextAst.nextElementSibling;
+    if (nextAst && nextAst.classList.contains('assistant')) {
+      nextAst._text = v.reply || '';
+      nextAst._meta = v.log;
+      nextAst._extra = v.extra;
+      nextAst._filesUsed = v.files_used;
+      nextAst._userMsg = userMsg;
+      var replyHtml = v.reply ? renderMd(v.reply) : '<em>(No response recorded for this version)</em>';
+      nextAst.innerHTML = '<div class="who assistant-who"><span class="bot-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> Upian AI</span></div>' +
+        '<div class="body">' + replyHtml + '</div>' + actionsBlock('assistant', v.files_used, v.reply, userMsg._versions, newIdx);
+    }
+
+    for (var i = 0; i < history.length; i++) {
+      if (history[i].role === 'user' && history[i].versions && history[i].versions.length === userMsg._versions.length) {
+        history[i].content = v.prompt;
+        history[i].versionIndex = newIdx;
+        if (history[i + 1] && history[i + 1].role === 'assistant') {
+          history[i + 1].content = v.reply || '';
+          history[i + 1].meta = v.log;
+          history[i + 1].extra = v.extra;
+        }
+        break;
+      }
+    }
+    save();
   }
 
   function imageCard(img) {
@@ -768,7 +1032,7 @@
       '</div>' + (bars ? '<div class="card-vision-bars">' + bars + '</div>' : '') + uncert + '</div>';
   }
 
-  function addMessage(role, content, meta, filesUsed, extra) {
+  function addMessage(role, content, meta, filesUsed, extra, versions, verIdx) {
     dropEmpty();
     var el = document.createElement('article');
     el.className = 'msg ' + role;
@@ -789,8 +1053,15 @@
       role === 'error' ? '<div class="who error-who">Error</div>' :
       '<div class="who assistant-who"><span class="bot-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> Upian AI</span></div>';
     el.innerHTML = whoHtml +
-      '<div class="body">' + body + '</div>' + actionsBlock(role, filesUsed, content);
+      '<div class="body">' + body + '</div>' + actionsBlock(role, filesUsed, content, versions, verIdx);
     el._text = content;
+    el._meta = meta;
+    el._extra = extra;
+    el._filesUsed = filesUsed;
+    if (versions) {
+      el._versions = versions;
+      el._versionIndex = (verIdx != null) ? verIdx : (versions.length - 1);
+    }
     thread.appendChild(el);
     toBottom();
     return el;
@@ -850,7 +1121,18 @@
   function onDone(ev, pend, row) {
     pend.remove();
     var extra = { image: ev.image, vision: ev.vision, data: ev.data };
-    addMessage('assistant', ev.reply, ev.log, ev.files_used, extra);
+    var lastUserMsgEl = thread.querySelector('.msg.user:last-of-type');
+    if (lastUserMsgEl && lastUserMsgEl._versions) {
+      var vIdx = (lastUserMsgEl._versionIndex != null) ? lastUserMsgEl._versionIndex : (lastUserMsgEl._versions.length - 1);
+      if (lastUserMsgEl._versions[vIdx]) {
+        lastUserMsgEl._versions[vIdx].reply = ev.reply;
+        lastUserMsgEl._versions[vIdx].log = ev.log;
+        lastUserMsgEl._versions[vIdx].extra = extra;
+        lastUserMsgEl._versions[vIdx].files_used = ev.files_used;
+      }
+    }
+    var astEl = addMessage('assistant', ev.reply, ev.log, ev.files_used, extra, lastUserMsgEl ? lastUserMsgEl._versions : null, lastUserMsgEl ? lastUserMsgEl._versionIndex : null);
+    if (lastUserMsgEl) astEl._userMsg = lastUserMsgEl;
     history.push({ role: 'assistant', content: ev.reply, meta: ev.log, files_used: ev.files_used, extra: extra });
     save();
     replaceLive(row, ev.log);
@@ -929,15 +1211,15 @@
   async function send(prompt) {
     if (busy || ctxUsed() >= CTX_MAX) return;
     
-    // Check if image generation is disallowed for the current account (Free users cannot generate images)
-    if (boot && (boot.plan === 'free' || boot.can_image_gen === false) && isClientImageRequest(prompt)) {
+    // Check if image generation is disallowed for the current account
+    if (boot && boot.can_image_gen === false && isClientImageRequest(prompt)) {
       addMessage('user', prompt);
       history.push({ role: 'user', content: prompt }); save();
-      addMessage('assistant', '⚠️ **AI Image Generation is a Pro Feature**\n\nFree users cannot generate AI images. Please **Upgrade to Pro** (includes **20 AI images per day**) or **Pro Plus** (includes **30 AI images per day**) to unlock image generation.\n\n<button type="button" class="btn sm primary" onclick="if(window.openPlanModal)window.openPlanModal(\'pro\')">⚡ Upgrade to Pro (20 images/day)</button>');
+      addMessage('assistant', '⚠️ **AI Image Generation is a Pro Feature**\n\nYour current plan does not include AI image generation. Please **Upgrade to Pro** (includes **20 AI images per day**) or **Pro Plus** (includes **30 AI images per day**) to unlock image generation.\n\n<button type="button" class="btn sm primary" onclick="if(window.openPlanModal)window.openPlanModal()">⚡ Upgrade Plan (Choose Pro / Pro Plus)</button>');
       showUpgradeModal({
-        title: 'AI Image Generation is a Pro Feature',
-        current_plan: 'free',
-        message: 'You are currently on the Free plan. Free users cannot generate AI images. Upgrade to Pro (20 AI images/day) or Pro Plus (30 AI images/day).'
+        title: 'AI Image Generation Requires Upgrade',
+        current_plan: boot.plan,
+        message: 'Your current subscription plan does not include AI image generation capabilities. Upgrade to Pro (20 AI images/day) or Pro Plus (30 AI images/day).'
       });
       return;
     }
@@ -969,6 +1251,7 @@
       renderChatHistory();
     }
 
+    currentRequestId = 'req_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 8);
     currentAbortController = new AbortController();
     setBusyState(true);
     var prior = history.slice(-8).map(function (m) { return { role: m.role, content: m.content }; });
@@ -985,8 +1268,9 @@
     renderUploadedChips();
 
     var userExtra = currentAttachments.length ? { attachments: currentAttachments } : null;
-    history.push({ role: 'user', content: prompt, extra: userExtra }); save();
-    addMessage('user', prompt, null, null, userExtra);
+    var userVersions = [{ prompt: prompt, reply: null, meta: null, extra: null, files_used: null }];
+    history.push({ role: 'user', content: prompt, extra: userExtra, versions: userVersions, versionIndex: 0 }); save();
+    var userMsgEl = addMessage('user', prompt, null, null, userExtra, userVersions, 0);
     var pend = addPending(), row = addLivePending(prompt), finished = false;
     currentPendingMsg = pend;
     currentLiveRow = row;
@@ -1001,7 +1285,8 @@
           doc_ids: selectedIds(),
           image_token: imgTokens[0] || null,
           image_tokens: imgTokens,
-          uploaded_tokens: allTokens
+          uploaded_tokens: allTokens,
+          request_id: currentRequestId
         })
       });
       if (!res.ok) {
@@ -1026,7 +1311,7 @@
           else if (ev.event === 'upgrade_required') {
             finished = true;
             if (pend.isConnected) pend.remove();
-            addMessage('assistant', '⚠️ **AI Image Generation is a Pro Feature**\n\nFree users cannot generate AI images. Please **Upgrade to Pro** (includes **20 AI images per day**) or **Pro Plus** (includes **30 AI images per day**) to unlock image generation.\n\n<button type="button" class="btn sm primary" onclick="if(window.openPlanModal)window.openPlanModal(\'pro\')">⚡ Upgrade to Pro (20 images/day)</button>');
+            addMessage('assistant', '⚠️ **AI Image Generation is a Pro Feature**\n\nFree users cannot generate AI images. Please **Upgrade to Pro** (includes **20 AI images per day**) or **Pro Plus** (includes **30 AI images per day**) to unlock image generation.\n\n<button type="button" class="btn sm primary" onclick="if(window.openPlanModal)window.openPlanModal()">⚡ Upgrade Plan (Choose Pro / Pro Plus)</button>');
             if (row.el.isConnected) replaceLive(row, ev.log);
             if (ev.usage) renderUsage(ev.usage);
             showUpgradeModal(ev);
@@ -1052,9 +1337,9 @@
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     if (busy) {
-      // ONLY stop if the user explicitly clicked the Send/Stop button (in stop-mode) or stop-btn
+      // ONLY stop if the user explicitly clicked the Send/Stop button (in stop-mode)
       var submitter = e.submitter;
-      if (submitter && (submitter.id === 'stop-btn' || submitter.classList.contains('stop-mode') || submitter === sendBtn)) {
+      if (submitter && (submitter.classList.contains('stop-mode') || submitter === sendBtn)) {
         stopCurrentPrompt();
       }
       return;
@@ -1077,13 +1362,6 @@
       form.requestSubmit();
     }
   });
-  var stopPill = $('stop-btn');
-  if (stopPill) {
-    stopPill.addEventListener('click', function (e) {
-      e.preventDefault();
-      stopCurrentPrompt();
-    });
-  }
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && busy) {
       stopCurrentPrompt();
@@ -1231,13 +1509,13 @@
     upgradeConfirm.addEventListener('click', function () {
       var upModal = document.getElementById('upgrade-modal');
       if (upModal) upModal.hidden = true;
-      if (window.openPlanModal) window.openPlanModal('pro');
+      if (window.openPlanModal) window.openPlanModal();
     });
   }
 
   renderChatHistory();
 
-  history.forEach(function (m) { addMessage(m.role, m.content, null, m.files_used, m.extra); });
+  history.forEach(function (m) { addMessage(m.role, m.content, m.meta, m.files_used, m.extra, m.versions, m.versionIndex); });
   document.querySelectorAll('.msg .meta').forEach(function (el) { el.remove(); });
   scroller.scrollTop = scroller.scrollHeight;
 

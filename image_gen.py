@@ -92,13 +92,14 @@ def analyze_image_prompt(prompt):
 
 
 def get_available_providers():
-    """Returns list of configured image generation providers based on environment keys."""
+    """Returns list of configured image generation providers based strictly on dedicated image keys."""
     providers = []
-    openai_key = env("OPENAI_API_KEY") or env("IMAGE_GEN_API_KEY")
-    if openai_key:
+    # Dedicated Image Key (never reuses text keys)
+    image_openai_key = env("IMAGE_GEN_API_KEY") or env("IMAGE_OPENAI_API_KEY")
+    if image_openai_key:
         providers.append({
             "name": "openai",
-            "label": "OpenAI DALL-E",
+            "label": "OpenAI DALL-E (Dedicated Image Key)",
             "models": ["dall-e-2", "dall-e-3"],
             "supports_img2img": True,
         })
@@ -116,9 +117,17 @@ def get_available_providers():
     if imagen_key:
         providers.append({
             "name": "imagen",
-            "label": "Google Imagen 3",
+            "label": "Google Imagen 3 (Dedicated Image Key)",
             "models": ["imagen-3.0-generate-002"],
             "supports_img2img": False,
+        })
+
+    if env("IMAGE_GEN_PROVIDER") == "mock" or not providers:
+        providers.append({
+            "name": "mock",
+            "label": "UPIAN Mock Image Generator",
+            "models": ["mock-diffusion-v1"],
+            "supports_img2img": True,
         })
 
     return providers
@@ -266,30 +275,36 @@ def generate_image(prompt, user_id=None, requested_model=None, requested_size=No
     model = requested_model or analysis["recommended_model"]
     size = requested_size or analysis["resolution"]
 
-    openai_key = env("OPENAI_API_KEY") or env("IMAGE_GEN_API_KEY")
+    image_openai_key = env("IMAGE_GEN_API_KEY") or env("IMAGE_OPENAI_API_KEY")
     stability_key = env("STABILITY_API_KEY")
     imagen_key = env("IMAGEN_API_KEY")  # Strictly dedicated image key; never use text GEMINI_API_KEY
+    image_provider_mode = env("IMAGE_GEN_PROVIDER", "auto").lower()
 
     # Check if a dedicated image generation API key is configured
-    if not (openai_key or stability_key or imagen_key):
-        raise ImageGenError(
-            "Image generation requires a dedicated image generation API key (`OPENAI_API_KEY`, `IMAGEN_API_KEY`, or `STABILITY_API_KEY`) in your `.env` file.\n\n"
-            "• Text API keys (such as `GEMINI_API_KEY`) are reserved strictly for text classification, routing, and reasoning.\n"
-            "• Please configure a dedicated image API key in `.env` to enable AI image generation.",
-            code="missing_image_api_key",
-            status_code=400,
-        )
+    if not (image_openai_key or stability_key or imagen_key):
+        if image_provider_mode == "mock":
+            raw_bytes = _generate_procedural_fallback(prompt)
+            provider_used = "Mock Provider"
+            model_used = "mock-diffusion-v1"
+        else:
+            raise ImageGenError(
+                "Image generation is not configured yet. Please configure a dedicated image generation API key (`IMAGE_GEN_API_KEY`, `IMAGEN_API_KEY`, or `STABILITY_API_KEY`) in your `.env` file.\n\n"
+                "• Text API keys (such as `GEMINI_API_KEY` or text `OPENAI_API_KEY`) are reserved strictly for text and are never used for images.\n"
+                "• Set `IMAGE_GEN_PROVIDER=mock` to preview procedural mock assets in local development.",
+                code="image_gen_not_configured",
+                status_code=400,
+            )
 
     started = time.perf_counter()
-    raw_bytes = None
-    provider_used = None
-    model_used = model
+    if raw_bytes is None:
+        provider_used = None
+        model_used = model
 
-    # 1. OpenAI DALL-E
-    if openai_key and ("dall-e" in model.lower() or not (stability_key or imagen_key)):
+    # 1. OpenAI DALL-E (Dedicated image key only)
+    if raw_bytes is None and image_openai_key and ("dall-e" in model.lower() or not (stability_key or imagen_key)):
         try:
             d_model = model if "dall-e" in model.lower() else "dall-e-3"
-            raw_bytes = _call_openai_dalle(prompt, d_model, size, openai_key)
+            raw_bytes = _call_openai_dalle(prompt, d_model, size, image_openai_key)
             provider_used = "OpenAI DALL-E"
             model_used = d_model
         except Exception as exc:

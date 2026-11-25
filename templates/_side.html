@@ -8,6 +8,7 @@
   <a href="{{ url_for('activity') }}" class="{{ 'on' if active == 'activity' else '' }}">My activity</a>
   {% if me.is_admin %}<a href="{{ url_for('admin_home') }}">Admin dashboard</a>{% endif %}
 </nav>
+{% if active == 'chat' %}
 <div class="side-history-section" id="side-history-section">
   <div class="side-history-head">
     <span class="side-history-title">Chat history</span>
@@ -17,6 +18,7 @@
     <div class="history-empty">No previous chats yet.</div>
   </div>
 </div>
+{% endif %}
 <div class="grow"></div>
 <div class="who-box">
   <div class="who-top" id="who-profile-view">

@@ -1,17 +1,175 @@
 """Prompt classifier: Qwen3-Embedding similarity + multi-feature heuristics.
 Routes prompts into 3 complexity tiers: 'simple', 'medium', 'complex'
 (with backwards-compatible legacy_tier mapping to 'weak' / 'strong')."""
+import abc
+import logging
 import math
 import os
 import re
 import threading
 import time
 
+logger = logging.getLogger("upian.router")
+
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from config import Config, SLOTS
+
+
+class QueryClassifierInterface(abc.ABC):
+    """
+    Abstract interface for query classification and model routing.
+    Allows rule-based heuristics or learned ML/embedding models to be used interchangeably.
+    """
+    @abc.abstractmethod
+    def classify(self, query: str, **kwargs) -> dict:
+        """
+        Classifies a query into cheap or expensive routing decision.
+        Returns a dict containing:
+          - tier: 'cheap' (simple) or 'expensive' (complex)
+          - score: float (0.0 to 1.0)
+          - model: selected model name
+          - task_type: detected task type
+          - reason: explanation of routing decision
+        """
+        pass
+
+
+class RuleBasedClassifier(QueryClassifierInterface):
+    """
+    Rule-based query classifier that evaluates:
+    1. Query length (character and word counts)
+    2. Keywords (code, math, architecture, analysis vs greetings/simple facts)
+    3. Task type (coding, math, system_design, analysis, translation, image_request, greeting, factual)
+    4. Image requested detection
+
+    Routes queries to 'cheap' (simple model) or 'expensive' (complex model).
+    If classification fails for any reason, safely defaults to the cheap model and logs the failure.
+    """
+    def __init__(self, cheap_model=None, expensive_model=None, threshold=None):
+        self._cheap_model = cheap_model
+        self._expensive_model = expensive_model
+        self._threshold = threshold
+
+    @property
+    def cheap_model(self):
+        return self._cheap_model or getattr(Config, "CHEAP_MODEL_NAME", None) or getattr(Config, "GEMINI_MEDIUM_MODEL", "gemini-3.8-flash")
+
+    @property
+    def expensive_model(self):
+        return self._expensive_model or getattr(Config, "EXPENSIVE_MODEL_NAME", None) or getattr(Config, "GEMINI_COMPLEX_MODEL", "gemini-3.8-pro")
+
+    @property
+    def threshold(self):
+        return self._threshold if self._threshold is not None else getattr(Config, "CLASSIFIER_THRESHOLD", 0.5)
+
+    def classify(self, query: str, **kwargs) -> dict:
+        started = time.perf_counter()
+        try:
+            if not isinstance(query, str):
+                query = str(query or "")
+
+            raw_query = query.strip()
+            if not raw_query:
+                res = {
+                    "tier": "cheap",
+                    "legacy_tier": "weak",
+                    "score": 0.0,
+                    "model": self.cheap_model,
+                    "suggested_model": self.cheap_model,
+                    "task_type": "empty",
+                    "capabilities": ["general"],
+                    "classify_ms": max(1, int((time.perf_counter() - started) * 1000)),
+                    "reason": "Empty or whitespace query defaulted to cheap model",
+                    "method": "rule_based",
+                }
+                logger.info("Routing decision: %s", res)
+                return res
+
+            # 1. Check if an image generation/editing task is requested
+            is_img = bool(re.search(
+                r"\b(generate|create|make|draw|render|paint|sketch)\s+(an?\s+)?(image|picture|photo|illustration|graphic|art)\b|"
+                r"\b(image\s+of|photo\s+of|picture\s+of)\b",
+                raw_query,
+                re.I,
+            ))
+
+            # 2. Detect capabilities / task type
+            caps = detect_capabilities(raw_query)
+            if is_img:
+                task_type = "image_request"
+            elif "coding" in caps:
+                task_type = "coding"
+            elif "system-design" in caps:
+                task_type = "system_design"
+            elif "deep-reasoning" in caps:
+                task_type = "analysis"
+            elif "math" in caps:
+                task_type = "math"
+            elif "translation" in caps:
+                task_type = "translation"
+            elif _GREET.match(raw_query) and len(raw_query.split()) <= 8:
+                task_type = "greeting"
+            elif len(raw_query.split()) < 15 and re.match(r"^\s*(what|who|when|where|why|which|define|how many)\b", raw_query, re.I):
+                task_type = "factual"
+            else:
+                task_type = "general_knowledge"
+
+            # 3. Compute score using rule-based heuristics
+            score = heuristic_score(raw_query)
+
+            # Override by preference if specified
+            pref = (kwargs.get("preference") or getattr(Config, "ROUTING_PREFERENCE", "auto")).lower()
+            if pref in ("speed", "fast", "low_cost"):
+                tier = "cheap"
+            elif pref in ("quality", "pro", "premium"):
+                tier = "expensive"
+            else:
+                tier = "expensive" if score >= self.threshold else "cheap"
+
+            selected_model = self.expensive_model if tier == "expensive" else self.cheap_model
+            legacy_tier = "strong" if tier == "expensive" else "weak"
+            reason = f"Task: {task_type}, score: {score:.3f} vs threshold: {self.threshold}"
+
+            res = {
+                "tier": tier,
+                "legacy_tier": legacy_tier,
+                "score": round(score, 3),
+                "model": selected_model,
+                "suggested_model": selected_model,
+                "task_type": task_type,
+                "capabilities": caps,
+                "is_image_request": is_img,
+                "classify_ms": max(1, int((time.perf_counter() - started) * 1000)),
+                "reason": reason,
+                "method": "rule_based",
+            }
+            logger.info(
+                "Routing decision: query=%r (len=%d) -> tier=%s, model=%s, score=%.3f, reason=%s",
+                raw_query[:50], len(raw_query), tier, selected_model, score, reason
+            )
+            return res
+
+        except Exception as exc:
+            # Rule: If classification fails, default to the cheap model and log the failure.
+            logger.error(
+                "Query classification failed for query %r: %s. Defaulting to cheap model.",
+                str(query)[:50], exc
+            )
+            return {
+                "tier": "cheap",
+                "legacy_tier": "weak",
+                "score": 0.0,
+                "model": self.cheap_model,
+                "suggested_model": self.cheap_model,
+                "task_type": "fallback_error",
+                "capabilities": ["general"],
+                "classify_ms": max(1, int((time.perf_counter() - started) * 1000)),
+                "reason": f"Fallback to cheap model due to error: {exc}",
+                "method": "fallback",
+            }
 
 HARD_EXAMPLES = [
     "Design a scalable microservices architecture for a payments platform with idempotency, retries and eventual consistency.",
@@ -55,12 +213,14 @@ EASY_EXAMPLES = [
 ]
 
 _HARD = re.compile(
-    r"\b(prove|proof|derive|derivation|optimi[sz]e|architecture|architect|system design|algorithm|"
-    r"complexity|refactor|debug|stack ?trace|implement|regression|theorem|integral|differential|"
+    r"\b(prove|proof|derive|derivation|optimi[sz]e|architect\w*|arquitect\w*|system design|algorith[me]?\w*|"
+    r"complexity|refactor|debug|stack ?trace|impl[ée]ment\w*|regression|theorem|integral|differential|"
     r"step[- ]by[- ]step|analy[sz]e|analysis|trade-?offs?|kubernetes|dockerfile|sql|concurren\w+|"
     r"race condition|deadlock|security|vulnerab\w+|legal|contract|diagnos\w+|strategy|business plan|"
-    r"scalab\w+|distributed|microservices?|benchmark|from scratch|idempotenc\w+|consensus|raft|paxos|"
-    r"multithread\w+|thread-safe|lru cache|database index|shard\w+|partition\w+)\b",
+    r"scalab\w+|distribu\w+|microserv\w+|benchmark|from scratch|idempotenc\w+|consensus|raft|paxos|"
+    r"multithread\w+|thread-safe|lru cache|database index|shard\w+|partition\w+|square root|irrational\w*|"
+    r"strong prompt|complex prompt|advanced prompt|reasoning prompt|in-depth|deep dive|step-by-step reasoning|architecture design|"
+    r"rag\b|retrieval[- ]augmented|vector\s*db|vector\s*database|embeddings?|semantic search|pip[e]?lines?)\b",
     re.I,
 )
 _MEDIUM = re.compile(
@@ -71,31 +231,40 @@ _MEDIUM = re.compile(
 )
 _CODE = re.compile(
     r"```|\bdef \w+\(|\bclass \w+|\bfunction\s*\w*\(|#include|\bimport \w+|=>|\bSELECT\b.+\bFROM\b|"
-    r"\bfor\s*\(.+;\s*.+;\s*.+\)|\bconst \w+\s*=|\blet \w+\s*=",
+    r"\bfor\s*\(.+;\s*.+;\s*.+\)|\bconst \w+\s*=|\blet \w+\s*=|\b(script|code)\s+python\b|"
+    r"\btests?\s+unitaires?\b",
     re.I | re.S,
 )
 _GREET = re.compile(
-    r"^\s*(hi|hello|hey|yo|thanks|thank you|ok|okay|good (morning|evening|night)|namaste|kem cho)\b",
+    r"^\s*(hi|hello|hey|yo|thanks|thank you|ok|okay|good (morning|evening|night)|namaste|kem cho|hola|bonjour)\b",
     re.I,
 )
 _MATH = re.compile(
     r"\b(solve|integral|differential|matrix|eigenvalue|derivative|equation|probability|"
-    r"distribution|standard deviation|permutation|combination)\b",
+    r"distribution|standard deviation|permutation|combination|square root|irrational\w*|math\w*)\b",
     re.I,
 )
 
 
 def detect_capabilities(prompt):
     caps = []
-    if _CODE.search(prompt) or re.search(r"\b(code|python|javascript|typescript|c\+\+|rust|java|html|css|sql|regex)\b", prompt, re.I):
+    is_coding = bool(
+        _CODE.search(prompt)
+        or re.search(r"\b(code|cod+ing|program\w*|develop\w*|python|javascript|typescript|c\+\+|rust|java|html|css|sql|regex|script|flask|fastapi|django|api\b|rest api|endpoint|pipeline|rag\b|કોડ|પાયથન|પ્રોગ્રામ)\b", prompt, re.I)
+        or (
+            re.search(r"\b(lakho|lakhi|lakhva|lakhvanu|banavo|aapo|લખો|બનાવો|આપો)\b", prompt, re.I)
+            and re.search(r"\b(code|python|program|script|loop|prinet|print|function|app|કોડ|પાયથન|પ્રિન્ટ)\b", prompt, re.I)
+        )
+    )
+    if is_coding:
         caps.append("coding")
-    if _MATH.search(prompt):
+    if _MATH.search(prompt) or re.search(r"\b(ganatari|hisab|સરવાળો|બાદબાકી|ગુણાકાર|ભાગાકાર)\b", prompt, re.I):
         caps.append("math")
-    if re.search(r"\b(architecture|microservices|distributed|system design|database|concurrency)\b", prompt, re.I):
+    if re.search(r"\b(architect\w*|arquitect\w*|microserv\w*|distribu\w*|system design|database|concurrency)\b", prompt, re.I):
         caps.append("system-design")
-    if re.search(r"\b(analy[sz]e|compare|trade-?offs?|critique|evaluate|review)\b", prompt, re.I):
+    if re.search(r"\b(analy[sz]e|compare|trade-?offs?|critique|evaluate|review|strong prompt|complex prompt|advanced prompt|reasoning prompt|deep reasoning)\b", prompt, re.I):
         caps.append("deep-reasoning")
-    if re.search(r"\b(translate|french|spanish|german|hindi|gujarati|japanese)\b", prompt, re.I):
+    if re.search(r"\b(translate|french|spanish|german|hindi|gujarati|gujlish|ગુજરાતી|japanese|અનુવાદ|ભાષાંતર)\b", prompt, re.I):
         caps.append("translation")
     return caps or ["general-knowledge"]
 
@@ -110,6 +279,10 @@ def heuristic_score(prompt):
 
     score = 0.10
 
+    # Explicit strong / complex prompt indicator bonus
+    if re.search(r"\b(strong\s+prompt|complex\s+prompt|advanced\s+prompt|reasoning\s+prompt)\b", prompt, re.I):
+        score += 0.45
+
     # Length-based scaling
     if words > 150 or chars > 900:
         score += 0.35
@@ -121,7 +294,7 @@ def heuristic_score(prompt):
     # Code structures or explicit code requests
     if _CODE.search(prompt):
         score += 0.35
-    elif re.search(r"\b(write a python|implement in|code a|write a script|function to|implement)\b", prompt, re.I):
+    elif re.search(r"\b((write|wirte|build|create|lakho|lakhi|lakhva|karo|લખો|બનાવો)\s+(a\s+)?(code|coding|cod+ing|python|script|program|function|pipeline|api|app|class)|(code|python|loop|prinet|print|પાયથન|કોડ)\s+.*(lakho|lakhi|lakhva|karo|લખો|બનાવો)|implement|implémente|code\s+a|write\s+a\s+script|écrivez|ecrivez|escriba|script\s+python|tests?\s+unitaires?)\b", prompt, re.I):
         score += 0.25
 
     # Medium explanatory prompts
@@ -267,6 +440,7 @@ class Classifier:
 
 
 classifier = Classifier()
+rule_based_classifier = RuleBasedClassifier()
 
 import threading as _threading
 _threading.Thread(target=classifier.load, daemon=True).start()

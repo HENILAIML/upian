@@ -71,11 +71,6 @@
       </div>
     </div>
     <form id="composer" class="composer" autocomplete="off">
-      <div id="stop-bar" class="stop-bar" style="display:none;">
-        <button type="button" id="stop-btn" class="stop-pill-btn" title="Stop generating (Esc)">
-          <span class="stop-sq">■</span> Stop generating
-        </button>
-      </div>
       <div class="composer-chips-row" id="composer-chips">
         <div class="chips" id="chips"></div>
         <div class="chips" id="uploaded-chips"></div>
@@ -148,4 +143,4 @@
 </div>
 <script id="boot" type="application/json">{{ boot|tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/chat.js', v='4.9') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/chat.js', v='5.0') }}"></script>{% endblock %}

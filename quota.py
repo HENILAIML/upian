@@ -4,6 +4,7 @@ from sqlalchemy import func
 
 from config import PLANS, Config
 from models import RequestLog, db, iso, utcnow
+from plans_service import get_user_plan_dict
 
 
 def local_tz():
@@ -40,7 +41,7 @@ def windows(now_utc=None):
 
 def get_usage(user):
     w = windows()
-    plan = PLANS.get(user.plan, PLANS["free"])
+    plan = get_user_plan_dict(user)
 
     def count(*conds):
         return (
