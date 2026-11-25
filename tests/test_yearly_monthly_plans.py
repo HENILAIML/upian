@@ -216,3 +216,68 @@ def test_admin_creates_and_updates_plan_with_both_prices(admin_client, user_clie
     # Clean up test plan
     res_del = admin_client.post(f"/admin/plans/{plan_id}/delete", data={"csrf_token": TEST_CSRF}, follow_redirects=True)
     assert res_del.status_code == 200
+
+
+def test_admin_price_change_updates_razorpay_order_immediately(admin_client, user_client):
+    """Test that when an admin updates the Pro plan price from 999 to 1999,
+    Razorpay order creation immediately uses 1999 instead of 999.
+    """
+    client_user, _ = user_client
+    headers = {"X-CSRF-Token": TEST_CSRF, "Content-Type": "application/json"}
+
+    with app.app_context():
+        pro_plan = Plan.query.filter(Plan.code.in_(["plus", "pro"])).first()
+        assert pro_plan is not None
+        orig_price = pro_plan.price
+        orig_price_inr = pro_plan.price_inr
+        orig_price_yr = pro_plan.price_yearly
+        orig_price_yr_inr = pro_plan.price_inr_yearly
+        orig_image_gen = pro_plan.image_gen
+        pro_id = pro_plan.id
+
+    try:
+        # 1. Update Pro plan price to 1999 via admin endpoint
+        update_data = {
+            "csrf_token": TEST_CSRF,
+            "label": "Pro",
+            "price_inr": "1999",
+            "price_usd": "15",
+            "price_inr_yearly": "19990",
+            "price_usd_yearly": "150",
+            "daily": "100",
+            "monthly": "2000",
+            "strong_monthly": "400",
+            "image_gen": "1",
+            "image_daily": "20",
+            "is_active": "1",
+        }
+        res_up = admin_client.post(f"/admin/plans/{pro_id}/update", data=update_data, follow_redirects=True)
+        assert res_up.status_code == 200
+
+        # 2. Verify Razorpay order endpoint creates order with updated amount 1999
+        res_ord = client_user.post("/api/payment/razorpay/order", headers=headers, json={"plan": "pro", "billing_cycle": "monthly"})
+        assert res_ord.status_code == 200
+        ord_data = res_ord.get_json()
+        assert ord_data["success"] is True
+        assert ord_data["amount"] == 1999.0
+
+        # 3. Verify user payment plans endpoint returns 1999
+        res_plans = client_user.get("/api/payment/plans")
+        assert res_plans.status_code == 200
+        plans_data = res_plans.get_json()
+        pro_info = next((p for p in plans_data["plans"] if p["id"] in ("plus", "pro")), None)
+        assert pro_info is not None
+        assert pro_info["price_inr"] == 1999.0
+
+    finally:
+        # Restore original prices and attributes
+        with app.app_context():
+            p = db.session.get(Plan, pro_id)
+            p.price = orig_price
+            p.price_inr = orig_price_inr
+            p.price_yearly = orig_price_yr
+            p.price_inr_yearly = orig_price_yr_inr
+            p.image_gen = orig_image_gen
+            db.session.commit()
+            import plans_service
+            plans_service.sync_plans_to_memory()

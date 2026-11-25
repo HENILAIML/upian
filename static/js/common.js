@@ -435,7 +435,7 @@ function renderUsage(u) {
   function getPlanPrice(plan, cycle) {
     var plans = getServerPlans();
     var key = (plan === 'pro') ? 'plus' : ((plan === 'pro_plus') ? 'plus_pro' : plan);
-    var info = plans[key] || plans[plan];
+    var info = plans[plan] || plans[key];
     if (info) {
       if (cycle === 'yearly') {
         var yr = parseFloat(info.price_inr_yearly || 0);
@@ -445,14 +445,15 @@ function renderUsage(u) {
       }
       return parseFloat(info.price_inr || 0);
     }
-    var card = document.querySelector('#card-modal-' + plan);
+    var card = document.querySelector('#card-modal-' + plan) ||
+               document.querySelector('#card-modal-' + key) ||
+               document.querySelector('.plan-card[data-plan="' + plan + '"]') ||
+               document.querySelector('.plan-card[data-plan="' + key + '"]');
     if (card) {
       var attr = (cycle === 'yearly') ? 'data-yearly-inr' : 'data-monthly-inr';
       var val = parseFloat(card.getAttribute(attr) || '0');
       if (val > 0) return val;
     }
-    if (plan === 'pro') return cycle === 'yearly' ? 9999 : 999;
-    if (plan === 'pro_plus') return cycle === 'yearly' ? 19999 : 1999;
     return 0;
   }
 
@@ -829,7 +830,7 @@ function renderUsage(u) {
             var ordPayload = {
               plan: selectedPlan,
               billing_cycle: payload.billing_cycle,
-              amount: payload.amount || (selectedPlan === 'pro_plus' ? 1999 : 999),
+              amount: payload.amount || amt || null,
               custom_plan_name: payload.custom_plan_name || null
             };
             var ordRes = await fetch('/api/payment/razorpay/order', {
@@ -839,6 +840,9 @@ function renderUsage(u) {
             });
             var ordData = await ordRes.json();
             if (ordData.success && ordData.razorpay_enabled && ordData.order_id && !ordData.simulated) {
+              if (ordData.amount) {
+                payload.amount = ordData.amount;
+              }
               var rzp = new Razorpay({
                 key: ordData.key_id,
                 amount: Math.round(ordData.amount * 100),

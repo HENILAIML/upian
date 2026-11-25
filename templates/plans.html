@@ -644,6 +644,9 @@
           });
           var ordData = await ordRes.json();
           if (ordData.success && ordData.razorpay_enabled && ordData.order_id && !ordData.simulated) {
+            if (ordData.amount) {
+              payload.amount = ordData.amount;
+            }
             var rzp = new Razorpay({
               key: ordData.key_id,
               amount: Math.round(ordData.amount * 100),

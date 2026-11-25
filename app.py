@@ -99,6 +99,11 @@ def init_database_safe(app_instance, max_retries=3, retry_delay=0.5):
                 except Exception as m_exc:
                     logger.warning("Auto-migration check notice: %s", m_exc)
                 seed_admin()
+                try:
+                    import plans_service
+                    plans_service.init_default_plans(app_instance)
+                except Exception as p_exc:
+                    logger.warning("Default plans initialization notice: %s", p_exc)
                 app_instance.config["DB_AVAILABLE"] = True
                 app_instance.config["DB_STATUS"] = "connected"
                 logger.info("Database connection established successfully on attempt %d.", attempt)
@@ -126,6 +131,11 @@ def init_database_safe(app_instance, max_retries=3, retry_delay=0.5):
                 except Exception as m_exc:
                     logger.warning("Auto-migration check notice: %s", m_exc)
                 seed_admin()
+                try:
+                    import plans_service
+                    plans_service.init_default_plans(app_instance)
+                except Exception as p_exc:
+                    logger.warning("Default plans initialization notice: %s", p_exc)
                 app_instance.config["DB_AVAILABLE"] = True
                 app_instance.config["DB_STATUS"] = "connected_sqlite_fallback"
                 logger.info("SQLite fallback database initialized successfully.")
@@ -219,20 +229,50 @@ def load_user_and_check_csrf():
 
 @app.context_processor
 def inject_globals():
-    # Build unique DISPLAY_PLANS from PLAN_ORDER
+    # Build unique DISPLAY_PLANS from database active plans
     display_plans = []
     seen = set()
-    for code in PLAN_ORDER:
-        if code in seen or code == "custom":
-            continue
-        p_info = PLANS.get(code)
-        if not p_info:
-            continue
-        canonical_id = p_info.get("id") or code
-        if canonical_id in seen or canonical_id == "custom":
-            continue
-        seen.add(canonical_id)
-        display_plans.append(p_info)
+    try:
+        from models import Plan
+        active_db_plans = Plan.query.filter_by(is_active=True).order_by(Plan.sort_order.asc(), Plan.id.asc()).all()
+        if active_db_plans:
+            for p in active_db_plans:
+                if p.code == "custom" or p.code in seen:
+                    continue
+                seen.add(p.code)
+                p_dict = p.to_plan_dict()
+                display_plans.append(p_dict)
+                PLANS[p.code] = p_dict
+                if p.code == "plus" or (p.label and p.label.strip().lower() == "pro"):
+                    PLANS["pro"] = p_dict
+                    PLANS["plus"] = p_dict
+                elif p.code == "plus_pro" or (p.label and p.label.strip().lower() in ("pro plus", "pro_plus")):
+                    PLANS["pro_plus"] = p_dict
+                    PLANS["plus_pro"] = p_dict
+        else:
+            for code in PLAN_ORDER:
+                if code in seen or code == "custom":
+                    continue
+                p_info = PLANS.get(code)
+                if not p_info:
+                    continue
+                canonical_id = p_info.get("id") or code
+                if canonical_id in seen or canonical_id == "custom":
+                    continue
+                seen.add(canonical_id)
+                display_plans.append(p_info)
+    except Exception:
+        for code in PLAN_ORDER:
+            if code in seen or code == "custom":
+                continue
+            p_info = PLANS.get(code)
+            if not p_info:
+                continue
+            canonical_id = p_info.get("id") or code
+            if canonical_id in seen or canonical_id == "custom":
+                continue
+            seen.add(canonical_id)
+            display_plans.append(p_info)
 
     def_p = plans_service.get_default_plan()
     def_code = def_p.code if def_p else "free"
@@ -455,39 +495,40 @@ def activity():
 def plans_page():
     plans_list = []
     seen = set()
-    for p in PLAN_ORDER:
-        if p == "custom" or p in seen:
-            continue
-        p_info = PLANS.get(p)
-        if not p_info:
-            continue
-        canonical_id = p_info.get("id") or p
-        if canonical_id in seen:
-            continue
-        seen.add(canonical_id)
-        is_cur = (g.user.plan == p or (p == "plus" and g.user.plan == "pro") or (p == "plus_pro" and g.user.plan == "pro_plus") or (g.user.plan == canonical_id))
-        plans_list.append({
-            "id": canonical_id,
-            "label": p_info["label"],
-            "price": p_info.get("price", 0),
-            "price_str": p_info.get("price_str", "$0"),
-            "price_inr": p_info.get("price_inr", 0),
-            "price_inr_str": p_info.get("price_inr_str", "₹0"),
-            "price_yearly": p_info.get("price_yearly", 0),
-            "price_yearly_str": p_info.get("price_yearly_str", "$0"),
-            "price_inr_yearly": p_info.get("price_inr_yearly", 0),
-            "price_inr_yearly_str": p_info.get("price_inr_yearly_str", "₹0"),
-            "period": p_info.get("period", "/mo"),
-            "description": p_info.get("description", ""),
-            "tag": p_info.get("tag", ""),
-            "daily": p_info.get("daily", 100),
-            "monthly": p_info.get("monthly", 2000),
-            "strong_monthly": p_info.get("strong_monthly", 400),
-            "image_gen": p_info.get("image_gen", False),
-            "image_daily": p_info.get("image_daily", 0),
-            "features": p_info.get("features", []),
-            "current": is_cur,
-        })
+    try:
+        from models import Plan
+        import plans_service
+        plans_service.sync_plans_to_memory()
+        active_db_plans = Plan.query.filter_by(is_active=True).order_by(Plan.sort_order.asc(), Plan.id.asc()).all()
+        if active_db_plans:
+            for p in active_db_plans:
+                if p.code == "custom" or p.code in seen:
+                    continue
+                seen.add(p.code)
+                p_dict = p.to_plan_dict()
+                canonical_id = p.code
+                is_cur = (g.user.plan == p.code or (p.code == "plus" and g.user.plan == "pro") or (p.code == "plus_pro" and g.user.plan == "pro_plus") or (g.user.plan == canonical_id))
+                p_dict["current"] = is_cur
+                plans_list.append(p_dict)
+    except Exception:
+        pass
+
+    if not plans_list:
+        for p in PLAN_ORDER:
+            if p == "custom" or p in seen:
+                continue
+            p_info = PLANS.get(p)
+            if not p_info:
+                continue
+            canonical_id = p_info.get("id") or p
+            if canonical_id in seen:
+                continue
+            seen.add(canonical_id)
+            is_cur = (g.user.plan == p or (p == "plus" and g.user.plan == "pro") or (p == "plus_pro" and g.user.plan == "pro_plus") or (g.user.plan == canonical_id))
+            p_dict = dict(p_info)
+            p_dict["current"] = is_cur
+            plans_list.append(p_dict)
+
     boot = {
         "uid": g.user.id,
         "plan": g.user.plan,
@@ -502,30 +543,37 @@ def plans_page():
 @login_required
 def api_payment_plans():
     plans_list = []
-    for p in PLAN_ORDER:
-        p_info = PLANS[p]
-        is_cur = (g.user.plan == p or (p == "plus" and g.user.plan == "pro") or (p == "plus_pro" and g.user.plan == "pro_plus"))
-        plans_list.append({
-            "id": p,
-            "label": p_info["label"],
-            "price": p_info.get("price", 0),
-            "price_str": p_info.get("price_str", "$0"),
-            "price_inr": p_info.get("price_inr", 0),
-            "price_inr_str": p_info.get("price_inr_str", "₹0"),
-            "price_yearly": p_info.get("price_yearly", 0),
-            "price_yearly_str": p_info.get("price_yearly_str", "$0"),
-            "price_inr_yearly": p_info.get("price_inr_yearly", 0),
-            "price_inr_yearly_str": p_info.get("price_inr_yearly_str", "₹0"),
-            "period": p_info.get("period", "/mo"),
-            "description": p_info.get("description", ""),
-            "daily": p_info["daily"],
-            "monthly": p_info["monthly"],
-            "strong_monthly": p_info["strong_monthly"],
-            "image_gen": p_info.get("image_gen", False),
-            "image_daily": p_info.get("image_daily", 0),
-            "features": p_info.get("features", []),
-            "current": is_cur,
-        })
+    seen = set()
+    try:
+        from models import Plan
+        import plans_service
+        plans_service.sync_plans_to_memory()
+        active_db_plans = Plan.query.filter_by(is_active=True).order_by(Plan.sort_order.asc(), Plan.id.asc()).all()
+        if active_db_plans:
+            for p in active_db_plans:
+                if p.code == "custom" or p.code in seen:
+                    continue
+                seen.add(p.code)
+                p_dict = p.to_plan_dict()
+                is_cur = (g.user.plan == p.code or (p.code == "plus" and g.user.plan == "pro") or (p.code == "plus_pro" and g.user.plan == "pro_plus"))
+                p_dict["current"] = is_cur
+                plans_list.append(p_dict)
+    except Exception:
+        pass
+
+    if not plans_list:
+        for p in PLAN_ORDER:
+            if p == "custom" or p in seen:
+                continue
+            seen.add(p)
+            p_info = PLANS.get(p)
+            if not p_info:
+                continue
+            is_cur = (g.user.plan == p or (p == "plus" and g.user.plan == "pro") or (p == "plus_pro" and g.user.plan == "pro_plus"))
+            p_dict = dict(p_info)
+            p_dict["current"] = is_cur
+            plans_list.append(p_dict)
+
     razorpay_enabled = bool(Config.RAZORPAY_KEY_ID and Config.RAZORPAY_KEY_SECRET)
     return jsonify(
         plans=plans_list,
@@ -555,33 +603,41 @@ def api_payment_razorpay_order():
         amount = float(custom_amount or (1999 if billing_cycle == "yearly" else 499))
         plan_id = "plus_pro" if amount >= 1500 else "plus"
         plan_label = custom_plan_name or "Custom Plan"
-    elif raw_plan == "pro":
-        plan_id = "plus"
-        plan_info = PLANS["plus"]
-        if billing_cycle == "yearly":
-            amount = float(custom_amount or (plan_info.get("price_inr_yearly", 9999) if currency == "INR" else plan_info.get("price_yearly", 120.0)))
-        else:
-            amount = float(custom_amount or (plan_info.get("price_inr", 999) if currency == "INR" else plan_info.get("price", 15.0)))
-        plan_label = custom_plan_name or plan_info["label"]
-    elif raw_plan == "pro_plus":
-        plan_id = "plus_pro"
-        plan_info = PLANS["plus_pro"]
-        if billing_cycle == "yearly":
-            amount = float(custom_amount or (plan_info.get("price_inr_yearly", 19999) if currency == "INR" else plan_info.get("price_yearly", 240.0)))
-        else:
-            amount = float(custom_amount or (plan_info.get("price_inr", 1999) if currency == "INR" else plan_info.get("price", 24.0)))
-        plan_label = custom_plan_name or plan_info["label"]
     else:
-        plan_id = raw_plan
-        p_chk = PLANS.get(plan_id)
-        if not p_chk or p_chk.get("price", 0) <= 0:
-            return jsonify(error="Invalid subscription plan selected.", code="invalid_plan"), 400
-        plan_info = p_chk
-        if billing_cycle == "yearly":
-            amount = float(custom_amount or (plan_info.get("price_inr_yearly", 9999) if currency == "INR" else plan_info.get("price_yearly", 120.0)))
+        # Dynamically lookup authoritative plan from database first
+        from models import Plan
+        import plans_service
+        plans_service.sync_plans_to_memory()
+
+        db_plan = None
+        if raw_plan in ("pro", "plus"):
+            db_plan = Plan.query.filter(Plan.is_active == True, Plan.code.in_(["plus", "pro"])).first()
+        elif raw_plan in ("pro_plus", "plus_pro"):
+            db_plan = Plan.query.filter(Plan.is_active == True, Plan.code.in_(["plus_pro", "pro_plus"])).first()
         else:
-            amount = float(custom_amount or (plan_info.get("price_inr", 999) if currency == "INR" else plan_info.get("price", 15.0)))
-        plan_label = custom_plan_name or plan_info["label"]
+            db_plan = Plan.query.filter(Plan.is_active == True, Plan.code == raw_plan).first()
+
+        if db_plan:
+            plan_id = db_plan.code
+            plan_label = custom_plan_name or db_plan.label
+            if billing_cycle == "yearly":
+                if currency == "INR":
+                    amount = float(db_plan.price_inr_yearly if db_plan.price_inr_yearly and db_plan.price_inr_yearly > 0 else (db_plan.price_inr * 10))
+                else:
+                    amount = float(db_plan.price_yearly if db_plan.price_yearly and db_plan.price_yearly > 0 else (db_plan.price * 10))
+            else:
+                amount = float(db_plan.price_inr if currency == "INR" else db_plan.price)
+        else:
+            target_key = "plus" if raw_plan == "pro" else ("plus_pro" if raw_plan == "pro_plus" else raw_plan)
+            p_chk = PLANS.get(target_key) or PLANS.get(raw_plan)
+            if not p_chk or p_chk.get("price", 0) <= 0:
+                return jsonify(error="Invalid subscription plan selected.", code="invalid_plan"), 400
+            plan_id = target_key
+            plan_label = custom_plan_name or p_chk.get("label", raw_plan.capitalize())
+            if billing_cycle == "yearly":
+                amount = float(p_chk.get("price_inr_yearly", 9999) if currency == "INR" else p_chk.get("price_yearly", 120.0))
+            else:
+                amount = float(p_chk.get("price_inr", 999) if currency == "INR" else p_chk.get("price", 15.0))
 
     receipt = f"rcpt_{g.user.id}_{uuid.uuid4().hex[:8]}"
     razorpay_key = Config.RAZORPAY_KEY_ID
@@ -699,15 +755,30 @@ def api_payment_process():
         try:
             amount = float(custom_amount)
         except (ValueError, TypeError):
+            amount = 0.0
+    else:
+        amount = 0.0
+
+    if amount <= 0:
+        from models import Plan
+        db_plan = None
+        if raw_plan in ("pro", "plus"):
+            db_plan = Plan.query.filter(Plan.is_active == True, Plan.code.in_(["plus", "pro"])).first()
+        elif raw_plan in ("pro_plus", "plus_pro"):
+            db_plan = Plan.query.filter(Plan.is_active == True, Plan.code.in_(["plus_pro", "pro_plus"])).first()
+        else:
+            db_plan = Plan.query.filter(Plan.is_active == True, Plan.code == raw_plan).first()
+
+        if db_plan:
+            if billing_cycle == "yearly":
+                amount = float(db_plan.price_inr_yearly if db_plan.price_inr_yearly and db_plan.price_inr_yearly > 0 else (db_plan.price_inr * 10))
+            else:
+                amount = float(db_plan.price_inr if currency == "INR" else db_plan.price)
+        else:
             if billing_cycle == "yearly":
                 amount = float(plan_info.get("price_inr_yearly", 9999) if currency == "INR" else plan_info.get("price_yearly", 120.0))
             else:
                 amount = float(plan_info.get("price_inr", 999) if currency == "INR" else plan_info.get("price", 15.0))
-    else:
-        if billing_cycle == "yearly":
-            amount = float(plan_info.get("price_inr_yearly", 9999) if currency == "INR" else plan_info.get("price_yearly", 120.0))
-        else:
-            amount = float(plan_info.get("price_inr", 999) if currency == "INR" else plan_info.get("price", 15.0))
 
     success, payment, msg = update_user_plan_idempotent(
         user_id=g.user.id,

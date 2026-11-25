@@ -134,10 +134,15 @@ def sync_plans_to_memory() -> None:
             PLANS[p.code] = p_dict
             order_codes.append(p.code)
             # Aliases for compatibility
-            if p.code == "plus":
+            lbl_lower = (p.label or "").strip().lower()
+            if p.code == "plus" or lbl_lower == "pro":
                 PLANS["pro"] = p_dict
-            elif p.code == "plus_pro":
+                PLANS["plus"] = p_dict
+            elif p.code == "plus_pro" or lbl_lower in ("pro plus", "pro_plus"):
                 PLANS["pro_plus"] = p_dict
+                PLANS["plus_pro"] = p_dict
+            elif p.code == "free" or lbl_lower == "free":
+                PLANS["free"] = p_dict
 
         # Update PLAN_ORDER in-place so all references keep working
         PLAN_ORDER.clear()
