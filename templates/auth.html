@@ -70,10 +70,27 @@
         </div>
       </div>
       <button class="btn primary block" type="submit">{{ 'Sign in' if mode == 'login' else 'Create account' }}</button>
-      <p class="alt">
-        {% if mode == 'login' %}New here? <a href="{{ url_for('register') }}">Create an account</a>
-        {% else %}Already registered? <a href="{{ url_for('login') }}">Sign in</a>{% endif %}
-      </p>
+      <div class="alt-wrap">
+        <p class="alt">
+          {% if mode == 'login' %}
+            <span class="alt-text">New here?</span>
+            <a href="{{ url_for('register') }}" class="alt-link">
+              <span>Create an account</span>
+              <svg class="alt-arrow" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 8h10M9 4l4 4-4 4"/>
+              </svg>
+            </a>
+          {% else %}
+            <span class="alt-text">Already registered?</span>
+            <a href="{{ url_for('login') }}" class="alt-link">
+              <span>Sign in</span>
+              <svg class="alt-arrow" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 8h10M9 4l4 4-4 4"/>
+              </svg>
+            </a>
+          {% endif %}
+        </p>
+      </div>
     </form>
   </section>
 </div>
