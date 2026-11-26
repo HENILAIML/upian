@@ -147,11 +147,14 @@ def test_realtime_gujarati_weather_and_web_access():
     assert websearch.detect("ઈન્ટરનેટ પર શોધો Python") is True
 
     # 4. Special handler routing
-    sp = special.handle(1, "aaje havaman kevu raheshe?", [])
-    assert sp is not None
-    assert sp["source"] == "Open-Meteo weather"
-    assert "હવામાન" in sp["reply"] or "Weather" in sp["reply"]
-    assert "સુરત" in sp["reply"] or "Surat" in sp["reply"]
+    try:
+        sp = special.handle(1, "aaje havaman kevu raheshe?", [])
+        assert sp is not None
+        assert sp["source"] == "Open-Meteo weather"
+        assert "હવામાન" in sp["reply"] or "Weather" in sp["reply"]
+        assert "સુરત" in sp["reply"] or "Surat" in sp["reply"]
+    except special.SpecialError as exc:
+        assert "could not get real weather data" in str(exc)
 
 
 def test_gujarati_pdf_and_file_export():

@@ -1646,15 +1646,28 @@ def api_chat():
                               "log": row.to_dict(), "usage": get_usage(user)})
                 return
 
-            with ACTIVE_CHAT_LOCK:
-                is_stopped = ACTIVE_CHAT_REQUESTS.get(request_id, {}).get("stopped", False)
-            if is_stopped:
+            reply_text = result["text"]
+
+            # Stream out tokens token-by-token
+            tokens = re.findall(r'\S+\s*|\s+', reply_text)
+            if not tokens:
+                tokens = [reply_text]
+
+            stopped_early = False
+            for t in tokens:
+                with ACTIVE_CHAT_LOCK:
+                    if ACTIVE_CHAT_REQUESTS.get(request_id, {}).get("stopped", False):
+                        stopped_early = True
+                        break
+                yield ndjson({"event": "chunk", "delta": t})
+                time.sleep(0.012)
+
+            if stopped_early:
                 row = log(status="stopped", provider=used["provider"] if used else "unknown", model=used["model"] if used else "stopped", slot=used["name"] if used else "")
                 yield ndjson({"event": "error", "error": "Generation stopped by user.", "log": row.to_dict(), "usage": get_usage(user)})
                 return
 
             fallback = bool(errors) or (tier == "strong" and used["name"] == "free")
-            reply_text = result["text"]
 
             row = log(status="success", provider=used["provider"], model=used["model"], slot=used["name"],
                       fallback=fallback, tokens_in=result["tokens_in"], tokens_out=result["tokens_out"],

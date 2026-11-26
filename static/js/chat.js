@@ -130,16 +130,39 @@
   var currentPendingMsg = null;
   var currentLiveRow = null;
   var currentRequestId = null;
+  var userScrolledUp = false;
+
+  thread.addEventListener('scroll', function () {
+    var distFromBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight;
+    userScrolledUp = distFromBottom > 65;
+  });
+
+  function smartAutoScroll() {
+    if (!userScrolledUp) {
+      toBottom();
+    }
+  }
 
   function setBusyState(isBusy) {
     busy = isBusy;
     if (isBusy) {
+      userScrolledUp = false;
       sendBtn.disabled = false;
       sendBtn.classList.add('stop-mode');
       sendBtn.innerHTML = '<span class="stop-sq">■</span> <span>Stop</span>';
       sendBtn.title = 'Stop generating (Esc)';
+      var planWidget = $('topbar-plan-widget');
+      if (planWidget) planWidget.style.pointerEvents = 'none';
+      document.querySelectorAll('.model-picker, select[name="model"], .starter').forEach(function (el) {
+        el.disabled = true;
+      });
     } else {
       resetSendBtn();
+      var planWidget = $('topbar-plan-widget');
+      if (planWidget) planWidget.style.pointerEvents = 'auto';
+      document.querySelectorAll('.model-picker, select[name="model"], .starter').forEach(function (el) {
+        el.disabled = false;
+      });
     }
   }
 
@@ -180,15 +203,33 @@
     if (currentPendingMsg && currentPendingMsg.isConnected) {
       var bodyEl = currentPendingMsg.querySelector('.body');
       var partial = currentPendingMsg._partialText || '';
-      var stoppedNotice = (partial ? renderMd(partial) : '<em>Generation stopped by user.</em>') +
-        ' <span class="dim small" style="margin-left:8px;font-weight:700;color:var(--bad);">(stopped)</span>';
-      if (bodyEl) {
-        bodyEl.innerHTML = stoppedNotice;
-        bodyEl.classList.remove('pending-text');
+      var streamBody = currentPendingMsg.querySelector('.live-stream-body');
+      var pText = currentPendingMsg.querySelector('.pending-text');
+      if (pText) pText.remove();
+
+      var finalText = partial || (streamBody && streamBody._accumulated) || '';
+      if (finalText) {
+        if (streamBody) {
+          streamBody.style.display = 'block';
+          streamBody.innerHTML = renderMd(finalText);
+        } else if (bodyEl) {
+          bodyEl.innerHTML = renderMd(finalText);
+          bodyEl.classList.remove('pending-text');
+        }
+        currentPendingMsg._text = finalText;
+        history.push({ role: 'assistant', content: finalText, stopped: true });
+        save();
+
+        var actions = document.createElement('div');
+        actions.className = 'msg-actions stopped-actions';
+        actions.style.marginTop = '10px';
+        actions.innerHTML =
+          '<button type="button" class="btn sm" onclick="window.retryLastPrompt()" style="margin-right:8px;">🔄 Retry</button>' +
+          '<button type="button" class="btn sm" onclick="window.continuePrompt()">▶ Continue generating</button>';
+        currentPendingMsg.appendChild(actions);
+      } else {
+        currentPendingMsg.remove();
       }
-      currentPendingMsg._text = (partial || 'Generation stopped by user.') + ' (stopped)';
-      history.push({ role: 'assistant', content: currentPendingMsg._text, stopped: true });
-      save();
     }
     if (currentLiveRow && currentLiveRow.stop) {
       currentLiveRow.stop();
@@ -395,53 +436,37 @@
     var it = e.target.closest('.dl-menu [data-save]');
     if (it) it.closest('.dl-menu').hidden = true;
   });
-  /* ctxv3: dynamic-island context bar (50k tokens, estimated as characters / 4) */
-  var CTX_MAX = 50000, CARRY = KEY + '_carry', ctxOpen = false, ctxAuto = false;
-  (function () {
-    var st = document.createElement('style');
-    st.textContent =
-      '.ctx{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:999;width:172px;box-sizing:border-box;background:#0b0b0f;color:#fff;border-radius:22px;padding:8px 14px;font-size:13px;box-shadow:0 8px 26px rgba(0,0,0,.35);overflow:hidden;transition:width .4s cubic-bezier(.2,.9,.3,1.15),border-radius .4s}' +
-      '.ctx.open{width:370px;border-radius:26px}' +
-      '.ctx-row{display:flex;align-items:center;gap:9px}' +
-      '.ctx-ring{width:18px;height:18px;border-radius:50%;flex:none;position:relative}' +
-      '.ctx-ring::after{content:"";position:absolute;inset:4px;border-radius:50%;background:#0b0b0f}' +
-      '.ctx.warn .ctx-ring{animation:ctxp 1.2s infinite}.ctx.full .ctx-ring{animation:ctxp .8s infinite}' +
-      '@keyframes ctxp{50%{transform:scale(1.25)}}' +
-      '.ctx-label{flex:1;font-weight:600;white-space:nowrap}' +
-      '.ctx-arrow{background:none;border:0;color:#fff;cursor:pointer;font-size:13px;padding:2px 4px;line-height:1;transition:transform .35s}' +
-      '.ctx.open .ctx-arrow{transform:rotate(180deg)}' +
-      '.ctx-more{display:none;margin-top:10px}.ctx.open .ctx-more{display:block}' +
-      '.ctx-txt{display:block;margin-bottom:6px;opacity:.85}' +
-      '.ctx-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.2);overflow:hidden}' +
-      '.ctx-bar i{display:block;height:100%;width:0;background:#2fd18b;transition:width .3s}' +
-      '.ctx.warn .ctx-bar i{background:#ffb020}.ctx.full .ctx-bar i{background:#ff4d4f}' +
-      '.ctx-btns{display:flex;gap:8px;margin-top:10px}' +
-      '.ctx-b{flex:1;background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:14px;padding:7px 10px;font:inherit;font-weight:600;cursor:pointer}' +
-      '.ctx-b:hover{background:rgba(255,255,255,.24)}.ctx-b:disabled{opacity:.4;cursor:not-allowed}' +
-      '.ctx-msg{margin-top:10px;padding:7px 10px;border-radius:12px;background:rgba(255,176,32,.18);line-height:1.4}' +
-      '.ctx.full .ctx-msg{background:rgba(255,77,79,.2)}.ctx-note{margin-top:8px;opacity:.65;font-size:12px}';
-    document.head.appendChild(st);
-  })();
-  var ctxBox = document.createElement('div');
-  ctxBox.className = 'ctx';
-  ctxBox.innerHTML = '<div class="ctx-row"><span class="ctx-ring"></span><span class="ctx-label">Context 0%</span>' +
-    '<button type="button" class="ctx-arrow" id="ctx-arrow" title="Show options">&#9662;</button></div>' +
-    '<div class="ctx-more"><span class="ctx-txt"></span><div class="ctx-bar"><i></i></div>' +
-    '<div class="ctx-btns"><button type="button" class="ctx-b" id="sum-dl">Download summary</button>' +
-    '<button type="button" class="ctx-b" id="sum-save">Save summary</button></div>' +
-    '<div class="ctx-msg" hidden></div><div class="ctx-note" hidden>Summary and last prompt carried over from the previous window.</div></div>';
-  var ctxMount = $('ctx-mount');
-  if (ctxMount) {
-    ctxMount.appendChild(ctxBox);
-  } else {
-    document.body.appendChild(ctxBox);
+  /* =========================================================================
+     Context / Token Bar & Usage Tabs + Download / Save Summary
+     ========================================================================= */
+  var CTX_LIMIT = 200000; // 200k context window
+  var CTX_MAX = CTX_LIMIT;
+  var CARRY = KEY + '_carry';
+  var ctxOpen = false;
+  var currentTokensIn = 0;
+  var currentTokensOut = 0;
+  var totalSessionTokens = 0;
+  var lastContextUsed = 0;
+
+  function fmtK(num) {
+    num = Number(num) || 0;
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+    return String(Math.round(num));
   }
 
-  function getCarry() { try { return localStorage.getItem(CARRY) || ''; } catch (e) { return ''; } }
+  function getCarry() {
+    try { return localStorage.getItem(CARRY) || ''; } catch (e) { return ''; }
+  }
+
   function carryPrior() {
     var c = getCarry();
-    return c ? [{ role: 'user', content: 'Context carried over from the earlier chat:\n' + c }, { role: 'assistant', content: 'Understood. I will continue from that context.' }] : [];
+    return c ? [
+      { role: 'user', content: 'Context carried over from the earlier chat:\n' + c },
+      { role: 'assistant', content: 'Understood. I will continue from that context.' }
+    ] : [];
   }
+
   function buildSummary() {
     var lines = [], last = '', i;
     history.slice(-20).forEach(function (m) {
@@ -450,49 +475,291 @@
       lines.push((m.role === 'user' ? 'User asked: ' : 'Upian answered: ') + s.slice(0, m.role === 'user' ? 200 : 250));
     });
     for (i = history.length - 1; i >= 0; i--) {
-      if (history[i].role === 'user') { last = String(history[i].content).replace(/\s+/g, ' ').trim().slice(0, 400); break; }
+      if (history[i].role === 'user') {
+        last = String(history[i].content).replace(/\s+/g, ' ').trim().slice(0, 400);
+        break;
+      }
     }
     var prev = getCarry();
     return (prev ? prev + '\n\n' : '') + 'Summary of the earlier chat:\n' + lines.join('\n') + (last ? '\n\nLast prompt: ' + last : '');
   }
+
+  function ctxEstimateUsed() {
+    var n = 250 + Math.ceil(getCarry().length / 4); // System prompt + carried context baseline
+    history.forEach(function (m) {
+      if (m.meta && m.meta.tokens_in) {
+        n += (m.meta.tokens_in + (m.meta.tokens_out || 0));
+      } else {
+        n += Math.ceil(String(m.content || '').length / 4) + 4;
+      }
+    });
+    return Math.max(lastContextUsed, n);
+  }
+
   function ctxUsed() {
-    var n = Math.ceil(getCarry().length / 4);
-    history.forEach(function (m) { n += Math.ceil(String(m.content || '').length / 4) + 4; });
-    return n;
+    return ctxEstimateUsed();
   }
+
+  (function initContextBarStyles() {
+    var st = document.createElement('style');
+    st.textContent =
+      '.ctx{position:relative;display:inline-block;user-select:none}' +
+      '.ctx-bar-pill{display:inline-flex;align-items:center;gap:8px;background:#0b0b0f;color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:22px;padding:7px 13px;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3);transition:all .2s ease;white-space:nowrap}' +
+      '.ctx-bar-pill:hover{background:#181822;border-color:rgba(255,255,255,.35)}' +
+      '.ctx-pill-ring{width:9px;height:9px;border-radius:50%;background:#2fd18b;display:inline-block;box-shadow:0 0 8px rgba(47,209,139,.4)}' +
+      '.ctx.warn .ctx-pill-ring{background:#ffb020;box-shadow:0 0 8px rgba(255,176,32,.5)}' +
+      '.ctx.full .ctx-pill-ring{background:#ff4d4f;box-shadow:0 0 8px rgba(255,77,79,.6)}' +
+      '.ctx-pill-arrow{font-size:11px;opacity:.7;transition:transform .2s ease}' +
+      '.ctx.open .ctx-pill-arrow{transform:rotate(180deg)}' +
+      '.ctx-panel{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);width:320px;max-width:92vw;background:#0f1015;color:#fff;border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:14px 16px;box-shadow:0 18px 42px rgba(0,0,0,.55);z-index:1000;font-size:12.5px}' +
+      '.ctx-panel-tabs{display:flex;background:rgba(255,255,255,.08);padding:3px;border-radius:10px;margin-bottom:14px}' +
+      '.ctx-tab-btn{flex:1;background:transparent;border:0;color:rgba(255,255,255,.65);font-size:12px;font-weight:600;padding:6px 10px;border-radius:7px;cursor:pointer;transition:all .15s ease}' +
+      '.ctx-tab-btn.active{background:#ff8f45;color:#fff;box-shadow:0 2px 8px rgba(255,143,69,.4)}' +
+      '.ctx-stat-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06)}' +
+      '.ctx-stat-row:last-of-type{border-bottom:0}' +
+      '.ctx-stat-row .lbl{color:rgba(255,255,255,.65);font-size:12px}' +
+      '.ctx-stat-row .val{font-weight:700;color:#fff;font-family:monospace}' +
+      '.ctx-progress{height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin:12px 0 14px}' +
+      '.ctx-progress-fill{height:100%;width:0;background:#2fd18b;transition:width .3s ease}' +
+      '.ctx.warn .ctx-progress-fill{background:#ffb020}' +
+      '.ctx.full .ctx-progress-fill{background:#ff4d4f}' +
+      '.ctx-breakdown{background:rgba(255,255,255,.04);border-radius:10px;padding:10px 12px;margin-top:10px}' +
+      '.ctx-bd-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.45);margin-bottom:6px}' +
+      '.ctx-bd-item{display:flex;justify-content:space-between;font-size:11.5px;color:rgba(255,255,255,.75);margin-bottom:4px}' +
+      '.ctx-btns{display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08)}' +
+      '.ctx-b{flex:1;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:7px 10px;font-size:11.5px;font-weight:600;cursor:pointer;transition:all .15s ease;display:inline-flex;align-items:center;justify-content:center;gap:5px}' +
+      '.ctx-b:hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.3)}' +
+      '.ctx-b.primary{background:#ff8f45;border-color:#ff8f45}' +
+      '.ctx-b.primary:hover{background:#ff7a28}' +
+      '.ctx-b:disabled{opacity:.4;cursor:not-allowed}' +
+      '.ctx-note{margin-top:8px;opacity:.65;font-size:11px;line-height:1.3}' +
+      '.ctx-msg{margin-top:8px;padding:6px 10px;border-radius:8px;background:rgba(255,176,32,.18);font-size:11px;line-height:1.3;color:#ffb020}' +
+      '.ctx.full .ctx-msg{background:rgba(255,77,79,.2);color:#ff4d4f}' +
+      '.streaming-cursor{display:inline-block;width:7px;height:14px;margin-left:3px;vertical-align:-1px;background-color:#ff8f45;animation:streamBlink .8s infinite;border-radius:2px}' +
+      '@keyframes streamBlink{0%,100%{opacity:1}50%{opacity:0}}' +
+      '@media (max-width:680px){.topbar-center{gap:6px}.ctx-bar-pill{padding:5px 9px;font-size:11.5px;gap:5px}.ctx-panel{position:fixed;top:54px;left:50%;transform:translateX(-50%);width:calc(100vw - 20px);max-width:340px;}}';
+    document.head.appendChild(st);
+  })();
+
+  var ctxBox = document.createElement('div');
+  ctxBox.className = 'ctx';
+  ctxBox.innerHTML =
+    '<button type="button" class="ctx-bar-pill" id="ctx-bar-pill" aria-expanded="false" title="Click to view Context Window & Token Usage">' +
+      '<span class="ctx-pill-ring"></span>' +
+      '<span class="ctx-pill-count">0 / 200k</span>' +
+      '<span class="ctx-pill-arrow">▾</span>' +
+    '</button>' +
+    '<div class="ctx-panel" id="ctx-panel" hidden>' +
+      '<div class="ctx-panel-tabs">' +
+        '<button type="button" class="ctx-tab-btn active" data-tab="context">Context</button>' +
+        '<button type="button" class="ctx-tab-btn" data-tab="usage">Usage</button>' +
+      '</div>' +
+      '<div class="ctx-tab-content" id="ctx-tab-context">' +
+        '<div class="ctx-stat-row"><span class="lbl">Window Limit</span><b class="val">200k tokens</b></div>' +
+        '<div class="ctx-stat-row"><span class="lbl">Used</span><b class="val ctx-val-used">0 (0%)</b></div>' +
+        '<div class="ctx-stat-row"><span class="lbl">Remaining</span><b class="val ctx-val-rem">200k</b></div>' +
+        '<div class="ctx-progress"><div class="ctx-progress-fill"></div></div>' +
+        '<div class="ctx-breakdown">' +
+          '<div class="ctx-bd-title">Breakdown</div>' +
+          '<div class="ctx-bd-item"><span>Messages</span><span class="ctx-bd-msg">0 tokens</span></div>' +
+          '<div class="ctx-bd-item"><span>System Prompt</span><span class="ctx-bd-sys">~250 tokens</span></div>' +
+          '<div class="ctx-bd-item"><span>Attached Files</span><span class="ctx-bd-files">0 tokens</span></div>' +
+        '</div>' +
+        '<div class="ctx-btns">' +
+          '<button type="button" class="ctx-b" id="sum-dl" title="Download summary of the conversation">📥 Download summary</button>' +
+          '<button type="button" class="ctx-b primary" id="sum-save" title="Save summary and start fresh window">💾 Save summary</button>' +
+        '</div>' +
+        '<div class="ctx-msg" id="ctx-msg" hidden></div>' +
+        '<div class="ctx-note" id="ctx-note" hidden>Summary and last prompt carried over from the previous window.</div>' +
+      '</div>' +
+      '<div class="ctx-tab-content" id="ctx-tab-usage" style="display:none;">' +
+        '<div class="ctx-stat-row"><span class="lbl">Input Tokens (Prompt)</span><b class="val ctx-val-in">0</b></div>' +
+        '<div class="ctx-stat-row"><span class="lbl">Output Tokens (Answer)</span><b class="val ctx-val-out">0</b></div>' +
+        '<div class="ctx-stat-row"><span class="lbl">Total Counted</span><b class="val ctx-val-tot">0</b></div>' +
+        '<div style="margin-top:10px;color:rgba(255,255,255,.5);font-size:11px;line-height:1.4;">' +
+          'Live token metrics tracked directly from API responses.' +
+        '</div>' +
+        '<div class="ctx-btns">' +
+          '<button type="button" class="ctx-b" id="sum-dl-usage" title="Download summary of the conversation">📥 Download summary</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  var ctxMount = $('ctx-mount');
+  if (ctxMount) {
+    ctxMount.appendChild(ctxBox);
+  } else {
+    document.body.appendChild(ctxBox);
+  }
+
+  function ctxEstimateUsed() {
+    var n = 250 + Math.ceil(getCarry().length / 4); // System prompt + carried context baseline
+    history.forEach(function (m) {
+      if (m.meta && m.meta.tokens_in) {
+        n += (m.meta.tokens_in + (m.meta.tokens_out || 0));
+      } else {
+        n += Math.ceil(String(m.content || '').length / 4) + 4;
+      }
+    });
+    return Math.max(lastContextUsed, n);
+  }
+
+  function ctxUsed() {
+    return ctxEstimateUsed();
+  }
+
   function ctxUpdate() {
-    var used = ctxUsed(), pct = Math.min(100, Math.floor(used / CTX_MAX * 100));
-    var full = used >= CTX_MAX, warn = !full && pct >= 90;
-    if ((warn || full) && !ctxAuto) { ctxAuto = true; ctxOpen = true; }
-    if (!warn && !full) ctxAuto = false;
-    var color = full ? '#ff4d4f' : warn ? '#ffb020' : '#2fd18b';
+    var used = ctxEstimateUsed();
+    lastContextUsed = used;
+    var pct = Math.min(100, Math.floor((used / CTX_LIMIT) * 100));
+    var full = used >= CTX_LIMIT;
+    var warn = !full && pct >= 85;
+
     ctxBox.className = 'ctx' + (ctxOpen ? ' open' : '') + (full ? ' full' : warn ? ' warn' : '');
-    ctxBox.querySelector('.ctx-ring').style.background = 'conic-gradient(' + color + ' ' + pct + '%, rgba(255,255,255,.22) 0)';
-    ctxBox.querySelector('.ctx-label').textContent = 'Context ' + pct + '%';
-    ctxBox.querySelector('.ctx-txt').textContent = fmtNum(Math.min(used, CTX_MAX)) + ' of ' + fmtNum(CTX_MAX) + ' tokens (' + pct + '%)';
-    ctxBox.querySelector('.ctx-bar i').style.width = pct + '%';
-    var mg = ctxBox.querySelector('.ctx-msg');
-    mg.hidden = !(warn || full);
-    mg.textContent = full
-      ? 'Your context window is full (100%). Downloads are off. Click Save summary to continue in a new window.'
-      : 'At ' + pct + '% your context window is almost full. Download what you need, or click Save summary to start a new window.';
-    ctxBox.querySelector('.ctx-note').hidden = !getCarry();
-    $('sum-dl').disabled = full || !history.length;
-    $('sum-save').disabled = !history.length;
-    Array.prototype.forEach.call(thread.querySelectorAll('.dl-toggle,[data-save]'), function (b) { b.disabled = full; });
+    var pillCount = ctxBox.querySelector('.ctx-pill-count');
+    if (pillCount) pillCount.textContent = fmtK(used) + ' / ' + fmtK(CTX_LIMIT);
+
+    var valUsed = ctxBox.querySelector('.ctx-val-used');
+    if (valUsed) valUsed.textContent = fmtNum(used) + ' (' + pct + '%)';
+
+    var valRem = ctxBox.querySelector('.ctx-val-rem');
+    if (valRem) valRem.textContent = fmtNum(Math.max(0, CTX_LIMIT - used));
+
+    var progressFill = ctxBox.querySelector('.ctx-progress-fill');
+    if (progressFill) progressFill.style.width = pct + '%';
+
+    var bdMsg = ctxBox.querySelector('.ctx-bd-msg');
+    if (bdMsg) bdMsg.textContent = fmtNum(Math.max(0, used - 250)) + ' tokens';
+
+    var valIn = ctxBox.querySelector('.ctx-val-in');
+    if (valIn) valIn.textContent = fmtNum(currentTokensIn);
+
+    var valOut = ctxBox.querySelector('.ctx-val-out');
+    if (valOut) valOut.textContent = fmtNum(currentTokensOut);
+
+    var valTot = ctxBox.querySelector('.ctx-val-tot');
+    if (valTot) valTot.textContent = fmtNum(totalSessionTokens || (currentTokensIn + currentTokensOut));
+
+    var sumDl = $('sum-dl');
+    var sumDlUsage = $('sum-dl-usage');
+    var sumSave = $('sum-save');
+    var hasHist = history.length > 0;
+    if (sumDl) sumDl.disabled = !hasHist;
+    if (sumDlUsage) sumDlUsage.disabled = !hasHist;
+    if (sumSave) sumSave.disabled = !hasHist;
+
+    var ctxMsg = $('ctx-msg');
+    if (ctxMsg) {
+      ctxMsg.hidden = !(warn || full);
+      ctxMsg.textContent = full
+        ? 'Your context window is full (100%). Click Save summary to continue in a new window.'
+        : 'At ' + pct + '% your context window is almost full. Download summary or click Save summary to start a fresh window.';
+    }
+
+    var ctxNote = $('ctx-note');
+    if (ctxNote) {
+      ctxNote.hidden = !getCarry();
+    }
   }
-  $('ctx-arrow').addEventListener('click', function () { ctxOpen = !ctxOpen; ctxBox.classList.toggle('open', ctxOpen); });
-  $('sum-dl').addEventListener('click', function () {
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([buildSummary()], { type: 'text/plain;charset=utf-8' }));
-    a.download = 'upian-summary.txt';
-    document.body.appendChild(a); a.click(); a.remove();
-  });
-  $('sum-save').addEventListener('click', function () {
-    try { localStorage.setItem(CARRY, buildSummary()); } catch (e) { alert('Could not save the summary.'); return; }
-    history = []; thread.innerHTML = emptyHTML; thread.insertAdjacentHTML('afterbegin', '<div class="newwin">New context window started. Your summary and last prompt are carried over.</div>'); save(); input.focus();
-  });
-  $('new-chat').addEventListener('click', function () { try { localStorage.removeItem(CARRY); } catch (e) {} });
+
+  // Toggle Context Dropdown
+  var ctxPillBtn = $('ctx-bar-pill');
+  var ctxPanel = $('ctx-panel');
+  if (ctxPillBtn && ctxPanel) {
+    ctxPillBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      ctxOpen = !ctxOpen;
+      ctxBox.classList.toggle('open', ctxOpen);
+      ctxPanel.hidden = !ctxOpen;
+      ctxPillBtn.setAttribute('aria-expanded', String(ctxOpen));
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', function (e) {
+      if (ctxOpen && !ctxBox.contains(e.target)) {
+        ctxOpen = false;
+        ctxBox.classList.remove('open');
+        ctxPanel.hidden = true;
+        ctxPillBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    // Tab switching (Context / Usage)
+    ctxPanel.querySelectorAll('.ctx-tab-btn').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var tab = btn.dataset.tab;
+        ctxPanel.querySelectorAll('.ctx-tab-btn').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        var tabCtx = $('ctx-tab-context');
+        var tabUsage = $('ctx-tab-usage');
+        if (tab === 'context') {
+          if (tabCtx) tabCtx.style.display = 'block';
+          if (tabUsage) tabUsage.style.display = 'none';
+        } else {
+          if (tabCtx) tabCtx.style.display = 'none';
+          if (tabUsage) tabUsage.style.display = 'block';
+        }
+      });
+    });
+
+    // Summary Download handler
+    function triggerSummaryDownload() {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([buildSummary()], { type: 'text/plain;charset=utf-8' }));
+      a.download = 'upian-summary.txt';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    var sumDl = $('sum-dl');
+    if (sumDl) {
+      sumDl.addEventListener('click', function (e) {
+        e.stopPropagation();
+        triggerSummaryDownload();
+      });
+    }
+
+    var sumDlUsage = $('sum-dl-usage');
+    if (sumDlUsage) {
+      sumDlUsage.addEventListener('click', function (e) {
+        e.stopPropagation();
+        triggerSummaryDownload();
+      });
+    }
+
+    // Save summary handler (starts fresh context window with summary carry-over)
+    var sumSave = $('sum-save');
+    if (sumSave) {
+      sumSave.addEventListener('click', function (e) {
+        e.stopPropagation();
+        try {
+          localStorage.setItem(CARRY, buildSummary());
+        } catch (err) {
+          alert('Could not save the summary.');
+          return;
+        }
+        history = [];
+        thread.innerHTML = emptyHTML;
+        thread.insertAdjacentHTML('afterbegin', '<div class="newwin">New context window started. Your summary and last prompt are carried over.</div>');
+        save();
+        input.focus();
+        ctxOpen = false;
+        ctxBox.classList.remove('open');
+        ctxPanel.hidden = true;
+        ctxUpdate();
+      });
+    }
+
+    var newChatBtn = $('new-chat');
+    if (newChatBtn) {
+      newChatBtn.addEventListener('click', function () {
+        try { localStorage.removeItem(CARRY); } catch (e) {}
+      });
+    }
+  }
+
   setTimeout(ctxUpdate, 0);
   /* plusv1: "+" menu, temporary attachments, drag and drop, black user bubble */
   var temp = [];
@@ -869,9 +1136,11 @@
       userMsg.parentNode.insertBefore(nextAst, userMsg.nextSibling);
     } else {
       nextAst.innerHTML = '<div class="who assistant-who"><span class="bot-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> Upian AI</span></div>' +
-        '<div class="body pending-text"><span class="dots"><i></i><i></i><i></i></span><span class="ptext">Choosing a model for edited prompt</span></div>';
+        '<div class="body pending-text"><span class="dots"><i></i><i></i><i></i></span><span class="ptext">AI is generating answer…</span></div>' +
+        '<div class="body live-stream-body" style="display:none;"></div>';
     }
     nextAst._userMsg = userMsg;
+    nextAst._partialText = '';
     currentPendingMsg = nextAst;
 
     var prevNodes = [];
@@ -921,6 +1190,17 @@
           if (!line) continue;
           var ev = JSON.parse(line);
           if (ev.event === 'route') onRoute(ev, nextAst, row);
+          else if (ev.event === 'chunk') {
+            nextAst._partialText = (nextAst._partialText || '') + (ev.delta || '');
+            var pText = nextAst.querySelector('.pending-text');
+            if (pText) pText.style.display = 'none';
+            var streamBody = nextAst.querySelector('.live-stream-body');
+            if (streamBody) {
+              streamBody.style.display = 'block';
+              streamBody.innerHTML = renderMd(nextAst._partialText) + '<span class="streaming-cursor"></span>';
+            }
+            smartAutoScroll();
+          }
           else if (ev.event === 'done') {
             finished = true;
             var extra = { image: ev.image, vision: ev.vision, data: ev.data };
@@ -956,6 +1236,12 @@
             save();
             replaceLive(row, ev.log);
             renderUsage(ev.usage);
+            if (ev.log) {
+              currentTokensIn = ev.log.tokens_in || 0;
+              currentTokensOut = ev.log.tokens_out || 0;
+              totalSessionTokens += (currentTokensIn + currentTokensOut);
+              ctxUpdate();
+            }
           } else if (ev.event === 'error') {
             finished = true;
             onError(ev, nextAst, row);
@@ -1070,7 +1356,10 @@
   function addPending() {
     var el = document.createElement('article');
     el.className = 'msg assistant';
-    el.innerHTML = '<div class="who">Upian</div><div class="body pending-text"><span class="dots"><i></i><i></i><i></i></span><span class="ptext">Choosing a model</span></div>';
+    el.innerHTML =
+      '<div class="who assistant-who"><span class="bot-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> Upian AI</span></div>' +
+      '<div class="body pending-text"><span class="dots"><i></i><i></i><i></i></span><span class="ptext">AI is generating answer…</span></div>' +
+      '<div class="body live-stream-body" style="display:none;"></div>';
     thread.appendChild(el);
     toBottom();
     return el;
@@ -1108,18 +1397,24 @@
   }
 
   function onRoute(ev, pend, row) {
-    var tag = row.el.querySelector('.tag');
-    tag.className = 'tag ' + ev.tier;
-    tag.textContent = tierLabel(ev.tier);
-    row.el.querySelector('.model').textContent = ev.model;
-    var txt = 'Routed to ' + tierLabel(ev.tier) + ' (' + ev.model + ')';
-    if (ev.capabilities && ev.capabilities.length) txt += ' [' + ev.capabilities.join(', ') + ']';
-    if (ev.downgraded) txt += ' · Quota fallback';
-    pend.querySelector('.ptext').textContent = txt;
+    if (row && row.el) {
+      var tag = row.el.querySelector('.tag');
+      if (tag) {
+        tag.className = 'tag ' + ev.tier;
+        tag.textContent = tierLabel(ev.tier);
+      }
+      var modelEl = row.el.querySelector('.model');
+      if (modelEl) modelEl.textContent = ev.model || '';
+    }
+    // Generating State: While generating, hide the model name. Show only "AI is generating answer…"
+    if (pend) {
+      var ptext = pend.querySelector('.ptext');
+      if (ptext) ptext.textContent = 'AI is generating answer…';
+    }
   }
 
   function onDone(ev, pend, row) {
-    pend.remove();
+    if (pend && pend.isConnected) pend.remove();
     var extra = { image: ev.image, vision: ev.vision, data: ev.data };
     var lastUserMsgEl = thread.querySelector('.msg.user:last-of-type');
     if (lastUserMsgEl && lastUserMsgEl._versions) {
@@ -1135,8 +1430,14 @@
     if (lastUserMsgEl) astEl._userMsg = lastUserMsgEl;
     history.push({ role: 'assistant', content: ev.reply, meta: ev.log, files_used: ev.files_used, extra: extra });
     save();
-    replaceLive(row, ev.log);
-    renderUsage(ev.usage);
+    if (row && row.el && row.el.isConnected) replaceLive(row, ev.log);
+    if (ev.usage) renderUsage(ev.usage);
+    if (ev.log) {
+      currentTokensIn = ev.log.tokens_in || 0;
+      currentTokensOut = ev.log.tokens_out || 0;
+      totalSessionTokens += (currentTokensIn + currentTokensOut);
+      ctxUpdate();
+    }
     uploadedFiles = [];
     renderUploadedChips();
     if (attachList) {
@@ -1146,12 +1447,50 @@
   }
 
   function onError(ev, pend, row) {
-    if (pend.isConnected) pend.remove();
-    if (history.length && history[history.length - 1].role === 'user') { history.pop(); save(); }
-    addMessage('error', ev.error || 'Something went wrong.');
-    if (row.el.isConnected) replaceLive(row, ev.log);
+    var partial = (pend && pend._partialText) ? pend._partialText : '';
+    if (pend && pend.isConnected) {
+      var pText = pend.querySelector('.pending-text');
+      if (pText) pText.remove();
+      var streamBody = pend.querySelector('.live-stream-body');
+      if (partial && streamBody) {
+        streamBody.style.display = 'block';
+        streamBody.innerHTML = renderMd(partial);
+        var actions = document.createElement('div');
+        actions.className = 'msg-actions stopped-actions';
+        actions.style.marginTop = '10px';
+        actions.innerHTML =
+          '<button type="button" class="btn sm" onclick="window.retryLastPrompt()" style="margin-right:8px;">🔄 Retry</button>' +
+          '<button type="button" class="btn sm" onclick="window.continuePrompt()">▶ Continue generating</button>';
+        pend.appendChild(actions);
+        history.push({ role: 'assistant', content: partial, stopped: true });
+        save();
+      } else {
+        pend.remove();
+        if (history.length && history[history.length - 1].role === 'user') { history.pop(); save(); }
+        var userFriendlyError = ev.error || 'The AI server encountered a temporary connection issue. Please retry.';
+        if (userFriendlyError.indexOf('HTTP') >= 0 || userFriendlyError.indexOf('Traceback') >= 0) {
+          userFriendlyError = 'The AI server is temporarily unavailable. Please retry in a few moments.';
+        }
+        addMessage('error', userFriendlyError);
+      }
+    }
+    if (row && row.el && row.el.isConnected) replaceLive(row, ev.log);
     if (ev.usage) renderUsage(ev.usage);
   }
+
+  window.retryLastPrompt = function () {
+    for (var i = history.length - 1; i >= 0; i--) {
+      if (history[i].role === 'user') {
+        var lastP = history[i].content;
+        send(lastP);
+        return;
+      }
+    }
+  };
+
+  window.continuePrompt = function () {
+    send("Please continue where you left off.");
+  };
 
   /* Upgrade modal logic for Free plan image generation requests */
   var upgradeModal = $('upgrade-modal');
@@ -1306,6 +1645,17 @@
           if (!line) continue;
           var ev = JSON.parse(line);
           if (ev.event === 'route') onRoute(ev, pend, row);
+          else if (ev.event === 'chunk') {
+            pend._partialText = (pend._partialText || '') + (ev.delta || '');
+            var pText = pend.querySelector('.pending-text');
+            if (pText) pText.style.display = 'none';
+            var streamBody = pend.querySelector('.live-stream-body');
+            if (streamBody) {
+              streamBody.style.display = 'block';
+              streamBody.innerHTML = renderMd(pend._partialText) + '<span class="streaming-cursor"></span>';
+            }
+            smartAutoScroll();
+          }
           else if (ev.event === 'done') { finished = true; onDone(ev, pend, row); }
           else if (ev.event === 'error') { finished = true; onError(ev, pend, row); }
           else if (ev.event === 'upgrade_required') {

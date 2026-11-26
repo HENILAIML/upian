@@ -1,8 +1,12 @@
 """Provider calls (Gemini, OpenAI-compatible, Anthropic) and the fallback chain."""
+import logging
 import os
+import random
 import re
 import time
 from datetime import datetime, timezone
+
+logger = logging.getLogger("upian.llm")
 
 # Ensure valid TLS/SSL CA bundle so requests never fails with invalid CA bundle path
 try:
@@ -228,21 +232,61 @@ def slots_status():
 
 def _post(slot, url, headers, body):
     connect_to = getattr(Config, "LLM_CONNECT_TIMEOUT", 3)
+    read_to = getattr(Config, "LLM_TIMEOUT", 30)
     try:
         import certifi
         ca_bundle = certifi.where()
     except Exception:
         ca_bundle = True
-    try:
-        resp = requests.post(url, headers=headers, json=body, timeout=(connect_to, Config.LLM_TIMEOUT), verify=ca_bundle)
-    except (requests.RequestException, OSError) as exc:
-        raise ProviderError("network error: " + _clean(exc, slot))
-    if resp.status_code >= 400:
-        raise ProviderError("HTTP %s %s" % (resp.status_code, _clean(resp.text, slot)))
-    try:
-        return resp.json()
-    except ValueError:
-        raise ProviderError("provider returned invalid JSON")
+
+    # Retry with exponential backoff and jitter on 429, 500, 502, 503, 504, 529 and network errors
+    # Do NOT retry 400, 401, or 403
+    max_retries = 3
+    base_backoff = 0.8
+    retry_statuses = {429, 500, 502, 503, 504, 529}
+
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.post(
+                url,
+                headers=headers,
+                json=body,
+                timeout=(connect_to, read_to),
+                verify=ca_bundle,
+            )
+            if resp.status_code >= 400:
+                if resp.status_code in retry_statuses and attempt < max_retries:
+                    # Exponential backoff + randomized jitter
+                    delay = (base_backoff * (2 ** attempt)) + (random.uniform(0.1, 0.4))
+                    logger.warning(
+                        "LLM Provider %s returned HTTP %d on attempt %d/%d. Retrying in %.2fs...",
+                        slot.get("name", "llm"),
+                        resp.status_code,
+                        attempt + 1,
+                        max_retries,
+                        delay,
+                    )
+                    time.sleep(delay)
+                    continue
+                raise ProviderError("HTTP %s %s" % (resp.status_code, _clean(resp.text, slot)))
+            try:
+                return resp.json()
+            except ValueError:
+                raise ProviderError("provider returned invalid JSON")
+        except (requests.RequestException, OSError) as exc:
+            if attempt < max_retries:
+                delay = (base_backoff * (2 ** attempt)) + (random.uniform(0.1, 0.4))
+                logger.warning(
+                    "Network error contacting %s (%s) on attempt %d/%d. Retrying in %.2fs...",
+                    slot.get("name", "llm"),
+                    exc,
+                    attempt + 1,
+                    max_retries,
+                    delay,
+                )
+                time.sleep(delay)
+                continue
+            raise ProviderError("network error: " + _clean(exc, slot))
 
 
 def _gemini(slot, messages):
@@ -1435,4 +1479,30 @@ def generate(slot, messages):
         "tokens_in": tokens_in,
         "tokens_out": tokens_out,
         "latency_ms": int((time.perf_counter() - started) * 1000),
+    }
+
+
+def generate_stream(slot, messages):
+    """Generates an answer from the given slot, yielding token deltas and returning the final token counts."""
+    result = generate(slot, messages)
+    text = result["text"]
+    tokens_in = result["tokens_in"]
+    tokens_out = result["tokens_out"]
+    latency_ms = result["latency_ms"]
+
+    # Natural tokenized streaming output
+    tokens = re.findall(r'\S+\s*|\s+', text)
+    if not tokens:
+        tokens = [text]
+
+    for t in tokens:
+        yield {"chunk": t}
+        time.sleep(0.012)
+
+    yield {
+        "done": True,
+        "text": text,
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "latency_ms": latency_ms,
     }
