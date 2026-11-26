@@ -258,6 +258,20 @@ function renderUsage(u) {
       var isHidden = planDrop.hidden;
       planDrop.hidden = !isHidden;
       if (planWidget) planWidget.classList.toggle('open', isHidden);
+
+      // Mutually exclusive: close Context dropdown when Plan dropdown is opened
+      if (isHidden) {
+        if (typeof window.closeContextDropdown === 'function') {
+          window.closeContextDropdown();
+        } else {
+          var ctxP = document.getElementById('ctx-panel');
+          var ctxB = document.querySelector('.ctx');
+          var ctxBtn = document.getElementById('ctx-bar-pill');
+          if (ctxP) ctxP.hidden = true;
+          if (ctxB) ctxB.classList.remove('open');
+          if (ctxBtn) ctxBtn.setAttribute('aria-expanded', 'false');
+        }
+      }
     });
     document.addEventListener('click', function (e) {
       if (!planDrop.hidden && !planDrop.contains(e.target) && e.target !== planBtn) {
@@ -265,6 +279,59 @@ function renderUsage(u) {
         if (planWidget) planWidget.classList.remove('open');
       }
     });
+  }
+
+  // Background Theme Switcher (White / Black)
+  function initTheme() {
+    var savedTheme = 'light';
+    try {
+      savedTheme = localStorage.getItem('upian_theme') || 'light';
+    } catch (e) {}
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      try {
+        localStorage.setItem('upian_theme', theme);
+      } catch (e) {}
+
+      var toggleBtn = document.getElementById('theme-toggle-btn');
+      var toggleIcon = document.getElementById('theme-btn-icon');
+      var toggleLabel = document.getElementById('theme-btn-label');
+      if (toggleIcon) toggleIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+      if (toggleLabel) toggleLabel.textContent = theme === 'dark' ? 'Light' : 'Dark';
+      if (toggleBtn) toggleBtn.title = theme === 'dark' ? 'Switch to White (Light) background' : 'Switch to Black (Dark) background';
+
+      document.querySelectorAll('.theme-pill-opt').forEach(function (pill) {
+        if (pill.dataset.setTheme === theme) {
+          pill.classList.add('active');
+        } else {
+          pill.classList.remove('active');
+        }
+      });
+    }
+
+    applyTheme(savedTheme);
+
+    var topbarToggle = document.getElementById('theme-toggle-btn');
+    if (topbarToggle) {
+      topbarToggle.addEventListener('click', function () {
+        var current = document.documentElement.getAttribute('data-theme') || 'light';
+        var next = current === 'dark' ? 'light' : 'dark';
+        applyTheme(next);
+      });
+    }
+
+    document.querySelectorAll('.theme-pill-opt').forEach(function (pill) {
+      pill.addEventListener('click', function () {
+        applyTheme(pill.dataset.setTheme);
+      });
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTheme);
+  } else {
+    initTheme();
   }
 })();
 

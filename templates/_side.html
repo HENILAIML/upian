@@ -40,5 +40,12 @@
     <button type="button" id="nickname-cancel-btn" class="nickname-btn cancel" title="Cancel">✕</button>
   </div>
   <div class="who-mail">{{ me.email }}</div>
+  <div class="theme-switch-row" title="Choose White or Black background">
+    <span class="theme-switch-title">Theme</span>
+    <div class="theme-switch-pills">
+      <button type="button" class="theme-pill-opt" data-set-theme="light">☀️ Light</button>
+      <button type="button" class="theme-pill-opt" data-set-theme="dark">🌙 Dark</button>
+    </div>
+  </div>
   <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link logout-btn" type="submit">Sign out</button></form>
 </div>

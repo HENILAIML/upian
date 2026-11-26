@@ -526,10 +526,10 @@
       '.ctx-breakdown{background:rgba(255,255,255,.04);border-radius:10px;padding:10px 12px;margin-top:10px}' +
       '.ctx-bd-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.45);margin-bottom:6px}' +
       '.ctx-bd-item{display:flex;justify-content:space-between;font-size:11.5px;color:rgba(255,255,255,.75);margin-bottom:4px}' +
-      '.ctx-btns{display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08)}' +
-      '.ctx-b{flex:1;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:7px 10px;font-size:11.5px;font-weight:600;cursor:pointer;transition:all .15s ease;display:inline-flex;align-items:center;justify-content:center;gap:5px}' +
+      '.ctx-btns{display:flex;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}' +
+      '.ctx-b{flex:1;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s ease;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}' +
       '.ctx-b:hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.3)}' +
-      '.ctx-b.primary{background:#ff8f45;border-color:#ff8f45}' +
+      '.ctx-b.primary{background:#ff8f45;border-color:#ff8f45;color:#fff}' +
       '.ctx-b.primary:hover{background:#ff7a28}' +
       '.ctx-b:disabled{opacity:.4;cursor:not-allowed}' +
       '.ctx-note{margin-top:8px;opacity:.65;font-size:11px;line-height:1.3}' +
@@ -566,8 +566,8 @@
           '<div class="ctx-bd-item"><span>Attached Files</span><span class="ctx-bd-files">0 tokens</span></div>' +
         '</div>' +
         '<div class="ctx-btns">' +
-          '<button type="button" class="ctx-b" id="sum-dl" title="Download summary of the conversation">📥 Download summary</button>' +
-          '<button type="button" class="ctx-b primary" id="sum-save" title="Save summary and start fresh window">💾 Save summary</button>' +
+          '<button type="button" class="ctx-b" id="sum-dl" title="Download summary of the conversation">Download summary</button>' +
+          '<button type="button" class="ctx-b primary" id="sum-save" title="Save summary and start fresh window">Save summary</button>' +
         '</div>' +
         '<div class="ctx-msg" id="ctx-msg" hidden></div>' +
         '<div class="ctx-note" id="ctx-note" hidden>Summary and last prompt carried over from the previous window.</div>' +
@@ -580,7 +580,7 @@
           'Live token metrics tracked directly from API responses.' +
         '</div>' +
         '<div class="ctx-btns">' +
-          '<button type="button" class="ctx-b" id="sum-dl-usage" title="Download summary of the conversation">📥 Download summary</button>' +
+          '<button type="button" class="ctx-b" id="sum-dl-usage" title="Download summary of the conversation">Download summary</button>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -665,6 +665,23 @@
   // Toggle Context Dropdown
   var ctxPillBtn = $('ctx-bar-pill');
   var ctxPanel = $('ctx-panel');
+
+  function closeContextDropdown() {
+    ctxOpen = false;
+    if (ctxBox) ctxBox.classList.remove('open');
+    if (ctxPanel) ctxPanel.hidden = true;
+    if (ctxPillBtn) ctxPillBtn.setAttribute('aria-expanded', 'false');
+  }
+  window.closeContextDropdown = closeContextDropdown;
+
+  function closePlanDropdown() {
+    var planDrop = $('topbar-plan-dropdown');
+    var planWidget = $('topbar-plan-widget');
+    if (planDrop) planDrop.hidden = true;
+    if (planWidget) planWidget.classList.remove('open');
+  }
+  window.closePlanDropdown = closePlanDropdown;
+
   if (ctxPillBtn && ctxPanel) {
     ctxPillBtn.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -672,15 +689,17 @@
       ctxBox.classList.toggle('open', ctxOpen);
       ctxPanel.hidden = !ctxOpen;
       ctxPillBtn.setAttribute('aria-expanded', String(ctxOpen));
+
+      // Mutually exclusive: close Plan dropdown when Context dropdown is opened
+      if (ctxOpen) {
+        closePlanDropdown();
+      }
     });
 
     // Close when clicking outside
     document.addEventListener('click', function (e) {
       if (ctxOpen && !ctxBox.contains(e.target)) {
-        ctxOpen = false;
-        ctxBox.classList.remove('open');
-        ctxPanel.hidden = true;
-        ctxPillBtn.setAttribute('aria-expanded', 'false');
+        closeContextDropdown();
       }
     });
 
