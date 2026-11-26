@@ -11,12 +11,10 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='5.1') }}">
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>
-  (function() {
-    try {
-      var t = localStorage.getItem('upian_theme') || 'light';
-      document.documentElement.setAttribute('data-theme', t);
-    } catch(e) {}
-  })();
+  try {
+    localStorage.removeItem('upian_theme');
+    document.documentElement.removeAttribute('data-theme');
+  } catch(e) {}
 </script>
 </head>
 <body class="{% block body_class %}{% endblock %}">

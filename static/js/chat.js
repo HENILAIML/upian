@@ -566,8 +566,14 @@
           '<div class="ctx-bd-item"><span>Attached Files</span><span class="ctx-bd-files">0 tokens</span></div>' +
         '</div>' +
         '<div class="ctx-btns">' +
-          '<button type="button" class="ctx-b" id="sum-dl" title="Download summary of the conversation">Download summary</button>' +
-          '<button type="button" class="ctx-b primary" id="sum-save" title="Save summary and start fresh window">Save summary</button>' +
+          '<button type="button" class="ctx-b" id="sum-dl" title="Download summary of the conversation">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>' +
+            '<span>Download summary</span>' +
+          '</button>' +
+          '<button type="button" class="ctx-b primary" id="sum-save" title="Save summary and start fresh window">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>' +
+            '<span>Save summary</span>' +
+          '</button>' +
         '</div>' +
         '<div class="ctx-msg" id="ctx-msg" hidden></div>' +
         '<div class="ctx-note" id="ctx-note" hidden>Summary and last prompt carried over from the previous window.</div>' +
@@ -580,7 +586,10 @@
           'Live token metrics tracked directly from API responses.' +
         '</div>' +
         '<div class="ctx-btns">' +
-          '<button type="button" class="ctx-b" id="sum-dl-usage" title="Download summary of the conversation">Download summary</button>' +
+          '<button type="button" class="ctx-b" id="sum-dl-usage" title="Download summary of the conversation">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>' +
+            '<span>Download summary</span>' +
+          '</button>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -685,15 +694,14 @@
   if (ctxPillBtn && ctxPanel) {
     ctxPillBtn.addEventListener('click', function (e) {
       e.stopPropagation();
-      ctxOpen = !ctxOpen;
+      var willOpen = !ctxOpen;
+      if (willOpen) {
+        closePlanDropdown();
+      }
+      ctxOpen = willOpen;
       ctxBox.classList.toggle('open', ctxOpen);
       ctxPanel.hidden = !ctxOpen;
       ctxPillBtn.setAttribute('aria-expanded', String(ctxOpen));
-
-      // Mutually exclusive: close Plan dropdown when Context dropdown is opened
-      if (ctxOpen) {
-        closePlanDropdown();
-      }
     });
 
     // Close when clicking outside
