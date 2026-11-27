@@ -124,6 +124,16 @@
     renderChatHistory();
     input.focus();
   }
+  window.startNewChat = startNewChat;
+
+  try {
+    if (new URLSearchParams(window.location.search).get('new') === '1') {
+      startNewChat();
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  } catch (e) {}
 
   var busy = false;
   var currentAbortController = null;
@@ -1781,10 +1791,21 @@
       startNewChat();
     });
   }
+  var navNewChat = $('nav-new-chat');
+  if (navNewChat) {
+    navNewChat.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      startNewChat();
+    });
+  }
 
   // Intercept click on active nav links or accidental unloads while streaming
   document.querySelectorAll('.nav a').forEach(function (link) {
     link.addEventListener('click', function (e) {
+      if (link.id === 'nav-new-chat') {
+        return;
+      }
       var href = link.getAttribute('href');
       if (href === '/' || link.classList.contains('on')) {
         e.preventDefault();
