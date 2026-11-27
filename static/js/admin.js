@@ -31,8 +31,8 @@
       var x = pl + i * step + (step - bw) / 2, hw = d.weak / top * ih, hs = d.strong / top * ih;
       var label = new Date(d.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
       out += '<g><title>' + label + ': ' + d.strong + ' strong, ' + d.weak + ' weak</title>' +
-        '<rect x="' + x + '" y="' + (pt + ih - hw) + '" width="' + bw + '" height="' + hw + '" fill="#17b26a"/>' +
-        '<rect x="' + x + '" y="' + (pt + ih - hw - hs) + '" width="' + bw + '" height="' + hs + '" fill="#5f3de8"/></g>';
+        '<rect x="' + x + '" y="' + (pt + ih - hw) + '" width="' + bw + '" height="' + hw + '" fill="#17b26a" rx="2"/>' +
+        '<rect x="' + x + '" y="' + (pt + ih - hw - hs) + '" width="' + bw + '" height="' + hs + '" fill="#c2561a" rx="2"/></g>';
       if (i % 2 === (series.length - 1) % 2) out += '<text x="' + (x + bw / 2) + '" y="' + (H - 7) + '" text-anchor="middle">' + label + '</text>';
     });
     $('chart').innerHTML = out + '</svg>';

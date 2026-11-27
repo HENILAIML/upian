@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Synapse Search · Upian AI{% endblock %}
+{% block body_class %}app site2-body{% endblock %}
+{% block body %}
+<div id="drop-overlay" class="drop-overlay">Drop files or images to research</div>
+
+<div class="shell" id="app-shell" data-ui="2">
+  <aside class="side" id="sidebar">
+    {% set active = 'chat' %}
+    {% include "_side.html" %}
+  </aside>
+
+  <main class="chat" id="chat-dropzone">
+    <!-- Synapse Header with Research Mode Toggles -->
+    <header class="chat-topbar" id="chat-topbar" style="border-bottom:1px solid var(--border);">
+      <div class="topbar-left">
+        <button type="button" class="panel-toggle-btn" id="sidebar-toggle" title="Toggle sidebar" aria-label="Toggle sidebar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <span style="font-weight:700; font-size:14px; margin-left:8px; color:var(--text);">Synapse Research Studio</span>
+        <span class="tag neutral" style="font-size:10px;">UI 2</span>
+      </div>
+
+      <div class="topbar-center" id="topbar-center">
+        <div class="research-modes-group" style="display:flex; align-items:center; gap:6px;">
+          <button type="button" class="research-mode-btn active" id="btn-mode-deep" onclick="document.querySelectorAll('.research-mode-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active');">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span>Deep Synthesis</span>
+          </button>
+          <button type="button" class="research-mode-btn" id="btn-mode-academic" onclick="document.querySelectorAll('.research-mode-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active');">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+            <span>Academic & Reasoning</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <!-- Plan Widget -->
+        <div class="topbar-plan-widget" id="topbar-plan-widget">
+          <button type="button" class="topbar-plan-btn" id="topbar-plan-btn">
+            <span class="plan-pill-name" id="top-plan-name">{{ PLANS[me.plan].label }}</span>
+            <span class="plan-pill-count" id="top-plan-count">--</span>
+          </button>
+          <div class="topbar-plan-dropdown" id="topbar-plan-dropdown" hidden>
+            <section class="usage" id="usage-box" onclick="if(window.openPlanModal){window.openPlanModal();}else{location.href='{{ url_for('plans_page') }}';}" style="cursor: pointer;">
+              <div class="usage-head"><span>Plan</span><b id="plan-name">{{ PLANS[me.plan].label }}</b></div>
+              <div id="meters"></div>
+              <p class="hint" id="reset-note"></p>
+              <div class="usage-upgrade-action">
+                <span>View & Upgrade Plans →</span>
+              </div>
+            </section>
+          </div>
+        </div>
+        <div id="ctx-mount"></div>
+        <button type="button" class="panel-toggle-btn live-btn" id="live-toggle" title="Toggle activity" aria-label="Toggle activity">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="scroller" class="scroller">
+      <div class="col" id="thread" style="max-width:800px;">
+        <div class="empty" id="empty" style="text-align:center; padding: 50px 0 30px;">
+          <h1 style="font-size:28px; font-weight:700; margin-bottom:10px;">Where knowledge begins.</h1>
+          <p style="max-width:540px; margin:0 auto 28px; font-size:14px; color:var(--text-secondary);">Ask any scientific, financial, or engineering question. Synapse routes prompts to verified neural models with citation grounding.</p>
+          <div class="starters" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); text-align:left;">
+            <button type="button" class="starter" data-p="Conduct a deep comparative analysis between Redis, Memcached, and Dragonfly with latency benchmarks.">Compare Redis vs Memcached vs Dragonfly</button>
+            <button type="button" class="starter" data-p="Explain the mathematical foundations of transformer attention mechanisms step-by-step.">Transformer attention mechanism math</button>
+            <button type="button" class="starter" data-p="Synthesize the key architectural trade-offs between monolithic and microservices architectures.">Microservices vs Monolith trade-offs</button>
+            <button type="button" class="starter" data-p="Explain what DNS does in two sentences.">DNS explained in two sentences</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Synapse Centered Search Input -->
+    <form id="composer" class="composer" autocomplete="off" style="max-width:800px; margin:0 auto; width:100%; padding-bottom:16px;">
+      <div class="composer-chips-row" id="composer-chips">
+        <div class="chips" id="chips"></div>
+        <div class="chips" id="uploaded-chips"></div>
+      </div>
+      <div class="col composer-row" style="border:1.5px solid var(--border); border-radius:10px; padding:12px 16px; background:var(--surface);">
+        <button type="button" class="plus-btn" id="plus-btn" title="Add file sources" aria-label="Add files">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+        <textarea id="prompt" rows="1" maxlength="{{ max_chars }}" placeholder="Ask anything to research and synthesize..." aria-label="Search prompt"></textarea>
+        <button id="send" class="btn primary" type="submit" aria-label="Submit search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </button>
+      </div>
+      <input type="file" id="direct-upload" multiple hidden accept="image/*,.png,.jpg,.jpeg,.webp,.bmp,.jfif,.pdf,.docx,.xlsx,.txt,.csv">
+      <div class="col composer-hint" style="margin-top:6px;">
+        <span>Multi-Source Grounding · <a href="{{ url_for('files_page') }}" class="link">My Files</a> · Ctrl+V screenshot</span>
+        <button type="button" class="link" id="new-chat">New search</button>
+      </div>
+    </form>
+  </main>
+
+  <aside class="live" id="live-panel">
+    <div class="live-head">
+      <div class="live-head-title"><h2>Live Activity</h2></div>
+    </div>
+    <ol id="live-list" class="live-list"></ol>
+    <a class="live-foot" href="{{ url_for('activity') }}">View full activity log</a>
+  </aside>
+</div>
+
+<div id="upgrade-modal" class="modal-backdrop upgrade-modal-backdrop" hidden>
+  <div class="upgrade-box">
+    <div class="modal-top-bar">
+      <h3 class="modal-title" id="upgrade-modal-title">Upgrade Plan</h3>
+      <button type="button" class="btn-icon-close" id="upgrade-modal-close" title="Close" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="upgrade-content">
+      <p id="upgrade-modal-desc" style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">This capability requires an upgraded subscription tier.</p>
+      <div style="display:flex; gap:10px;">
+        <button type="button" class="btn primary" id="upgrade-confirm-btn" style="flex:1;">Upgrade to Pro</button>
+        <button type="button" class="btn btn-ghost" id="upgrade-cancel-btn">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script id="boot" type="application/json">{{ boot|tojson }}</script>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/chat.js', v='7.0') }}"></script>{% endblock %}

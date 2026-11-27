@@ -59,9 +59,9 @@
           <td class="r" style="font-weight:600;">{{ p.strong_monthly }}</td>
           <td>
             {% if p.image_gen %}
-            <span class="tag weak" style="font-size:11px;">✔ {{ p.image_daily }}/day</span>
+            <span class="tag weak">{{ p.image_daily }}/day</span>
             {% else %}
-            <span class="tag neutral" style="font-size:11px; opacity:0.7;">✕ None</span>
+            <span class="tag neutral">None</span>
             {% endif %}
           </td>
           <td>
@@ -71,7 +71,7 @@
             <span class="tag err">Inactive</span>
             {% endif %}
             {% if p.is_default %}
-            <span class="tag strong" title="Assigned to new signups by default" style="font-size:10px; background:var(--ink); color:#fff;">★ Default</span>
+            <span class="tag strong" title="Assigned to new signups by default">Default</span>
             {% endif %}
           </td>
           <td class="r">
@@ -100,11 +100,11 @@
 <!-- ========================================================================= -->
 <!-- 1. CREATE NEW PLAN MODAL                                                  -->
 <!-- ========================================================================= -->
-<div id="createPlanModal" class="modal-backdrop" hidden style="position:fixed;inset:0;background:rgba(18,18,18,0.55);backdrop-filter:blur(3px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;">
-  <div style="background:#fff;border:2px solid var(--ink);border-radius:16px;box-shadow:6px 6px 0 var(--ink);width:100%;max-width:580px;max-height:90vh;overflow-y:auto;padding:24px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1.5px solid var(--line2);padding-bottom:12px;">
-      <h3 style="margin:0;font:800 20px var(--display);color:var(--ink);">Create New Subscription Plan</h3>
-      <button type="button" onclick="closeCreatePlanModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--mute);">&times;</button>
+<div id="createPlanModal" class="modal-backdrop" hidden>
+  <div class="admin-modal-box">
+    <div class="admin-modal-header">
+      <h3>Create New Subscription Plan</h3>
+      <button type="button" class="btn-close" onclick="closeCreatePlanModal()" aria-label="Close modal">&times;</button>
     </div>
 
     <form method="post" action="{{ url_for('admin_create_plan') }}">
@@ -112,30 +112,30 @@
       
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
         <div>
-          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Plan Name / Label *</label>
-          <input type="text" name="label" required placeholder="e.g. Enterprise Tier" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;" oninput="autoFillPlanCode(this.value)">
+          <label>Plan Name / Label *</label>
+          <input type="text" name="label" required placeholder="e.g. Enterprise Tier" oninput="autoFillPlanCode(this.value)">
         </div>
         <div>
-          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Plan Code (ID)</label>
-          <input type="text" id="create-plan-code" name="code" placeholder="e.g. enterprise" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+          <label>Plan Code (ID)</label>
+          <input type="text" id="create-plan-code" name="code" placeholder="e.g. enterprise">
         </div>
       </div>
 
       <!-- Pricing Section: Monthly & Yearly -->
-      <div style="background:#faf9f6;border:1.5px solid var(--line2);border-radius:10px;padding:12px;margin-bottom:12px;">
-        <div style="font-size:12.5px;font-weight:800;color:var(--ink);margin-bottom:8px;">Plan Pricing (Manual Control)</div>
+      <div class="admin-modal-section">
+        <div class="admin-modal-section-title">Plan Pricing (Manual Control)</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:10px;">
           <div>
-            <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;color:var(--ink);">Monthly Price in INR (₹) *</label>
-            <input type="number" step="1" min="0" id="create-price-inr" name="price_inr" required placeholder="e.g. 999" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;" oninput="autoCalculateAllPrices(this.value)">
+            <label>Monthly Price in INR (₹) *</label>
+            <input type="number" step="1" min="0" id="create-price-inr" name="price_inr" required placeholder="e.g. 999" oninput="autoCalculateAllPrices(this.value)">
           </div>
           <div>
-            <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;color:var(--ink);">Monthly Price in USD ($)</label>
-            <input type="number" step="0.5" min="0" id="create-price-usd" name="price_usd" placeholder="e.g. 15" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+            <label>Monthly Price in USD ($)</label>
+            <input type="number" step="0.5" min="0" id="create-price-usd" name="price_usd" placeholder="e.g. 15">
           </div>
           <div>
-            <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;color:var(--ink);">Base Period</label>
-            <select name="period" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+            <label>Base Period</label>
+            <select name="period">
               <option value="/mo" selected>/mo (Monthly)</option>
               <option value="/yr">/yr (Yearly)</option>
               <option value="forever">forever (Lifetime)</option>
@@ -143,22 +143,22 @@
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding-top:8px;border-top:1px dashed var(--line2);">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding-top:8px;border-top:1px dashed var(--border);">
           <div>
-            <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;color:var(--ink);">Yearly Price in INR (₹) <span style="font-size:10px;color:var(--mute);">(Save ~17%)</span></label>
-            <input type="number" step="1" min="0" id="create-price-inr-yearly" name="price_inr_yearly" placeholder="e.g. 9999" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+            <label>Yearly Price in INR (₹) <span style="font-size:10px;color:var(--text-muted);">(Save ~17%)</span></label>
+            <input type="number" step="1" min="0" id="create-price-inr-yearly" name="price_inr_yearly" placeholder="e.g. 9999">
           </div>
           <div>
-            <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;color:var(--ink);">Yearly Price in USD ($)</label>
-            <input type="number" step="0.5" min="0" id="create-price-usd-yearly" name="price_usd_yearly" placeholder="e.g. 150" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+            <label>Yearly Price in USD ($)</label>
+            <input type="number" step="0.5" min="0" id="create-price-usd-yearly" name="price_usd_yearly" placeholder="e.g. 150">
           </div>
         </div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
         <div>
-          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Badge / Tag</label>
-          <select name="tag" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+          <label>Badge / Tag</label>
+          <select name="tag">
             <option value="">None</option>
             <option value="POPULAR">POPULAR</option>
             <option value="RECOMMENDED">RECOMMENDED</option>
@@ -170,47 +170,47 @@
           </select>
         </div>
         <div>
-          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Short Description</label>
-          <input type="text" name="description" placeholder="e.g. Dedicated high-throughput tier" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+          <label>Short Description</label>
+          <input type="text" name="description" placeholder="e.g. Dedicated high-throughput tier">
         </div>
       </div>
 
       <!-- Quota Limits Grid -->
-      <div style="background:#faf9f6;border:1.5px solid var(--line2);border-radius:10px;padding:12px;margin-bottom:14px;">
-        <div style="font-size:12.5px;font-weight:800;color:var(--ink);margin-bottom:8px;">Plan Quota & Intelligence Limits</div>
+      <div class="admin-modal-section">
+        <div class="admin-modal-section-title">Plan Quota & Intelligence Limits</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:2px;">Daily Requests</label>
-            <input type="number" min="1" name="daily" value="150" required style="width:100%;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;font-size:12.5px;">
+            <label>Daily Requests</label>
+            <input type="number" min="1" name="daily" value="150" required>
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:2px;">Monthly Requests</label>
-            <input type="number" min="1" name="monthly" value="3000" required style="width:100%;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;font-size:12.5px;">
+            <label>Monthly Requests</label>
+            <input type="number" min="1" name="monthly" value="3000" required>
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:2px;">Deep Reasoning Calls</label>
-            <input type="number" min="0" name="strong_monthly" value="600" required style="width:100%;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;font-size:12.5px;">
+            <label>Deep Reasoning Calls</label>
+            <input type="number" min="0" name="strong_monthly" value="600" required>
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--line2);">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);">
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:2px;">AI Image Generation</label>
-            <select name="image_gen" style="width:100%;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;font-size:12.5px;">
+            <label>AI Image Generation</label>
+            <select name="image_gen">
               <option value="yes" selected>Yes (Enabled)</option>
               <option value="no">No (Disabled)</option>
             </select>
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:2px;">AI Images / Day</label>
-            <input type="number" min="0" name="image_daily" value="25" style="width:100%;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;font-size:12.5px;">
+            <label>AI Images / Day</label>
+            <input type="number" min="0" name="image_daily" value="25">
           </div>
         </div>
       </div>
 
       <div style="margin-bottom:16px;">
-        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Feature Bullet Points (One per line)</label>
-        <textarea name="features" rows="4" placeholder="150 daily requests with priority speeds&#10;25 AI Images per day&#10;Deep Reasoning & Complex Analysis&#10;Full document exports (.xlsx, .pdf, .docx)" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:12.5px;font-family:inherit;"></textarea>
+        <label>Feature Bullet Points (One per line)</label>
+        <textarea name="features" rows="4" placeholder="150 daily requests with priority speeds&#10;25 AI Images per day&#10;Deep Reasoning & Complex Analysis&#10;Full document exports (.xlsx, .pdf, .docx)"></textarea>
       </div>
 
       <div style="display:flex;justify-content:flex-end;gap:10px;">
@@ -224,11 +224,11 @@
 <!-- ========================================================================= -->
 <!-- 2. EDIT PLAN MODAL                                                        -->
 <!-- ========================================================================= -->
-<div id="editPlanModal" class="modal-backdrop" hidden style="position:fixed;inset:0;background:rgba(18,18,18,0.55);backdrop-filter:blur(3px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;">
-  <div style="background:#fff;border:2px solid var(--ink);border-radius:16px;box-shadow:6px 6px 0 var(--ink);width:100%;max-width:580px;max-height:90vh;overflow-y:auto;padding:24px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1.5px solid var(--line2);padding-bottom:12px;">
-      <h3 style="margin:0;font:800 20px var(--display);color:var(--ink);">Edit Subscription Plan</h3>
-      <button type="button" onclick="closeEditPlanModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--mute);">&times;</button>
+<div id="editPlanModal" class="modal-backdrop" hidden>
+  <div class="admin-modal-box">
+    <div class="admin-modal-header">
+      <h3>Edit Subscription Plan</h3>
+      <button type="button" class="btn-close" onclick="closeEditPlanModal()" aria-label="Close modal">&times;</button>
     </div>
 
     <form id="editPlanForm" method="post" action="">
@@ -236,30 +236,30 @@
       
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
         <div>
-          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Plan Name / Label *</label>
-          <input type="text" id="edit-label" name="label" required style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+          <label>Plan Name / Label *</label>
+          <input type="text" id="edit-label" name="label" required>
         </div>
         <div>
-          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Plan Code (Read-only)</label>
-          <input type="text" id="edit-code" readonly style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;background:#f3f4f6;opacity:0.8;">
+          <label>Plan Code (Read-only)</label>
+          <input type="text" id="edit-code" readonly>
         </div>
       </div>
 
       <!-- Pricing Section: Monthly & Yearly -->
-      <div style="background:#faf9f6;border:1.5px solid var(--line2);border-radius:10px;padding:12px;margin-bottom:12px;">
-        <div style="font-size:12.5px;font-weight:800;color:var(--ink);margin-bottom:8px;">Plan Pricing (Manual Control)</div>
+      <div class="admin-modal-section">
+        <div class="admin-modal-section-title">Plan Pricing (Manual Control)</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:10px;">
           <div>
-            <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;color:var(--ink);">Monthly Price in INR (₹) *</label>
-            <input type="number" step="1" min="0" id="edit-price-inr" name="price_inr" required style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;" oninput="autoCalculateEditUSD(this.value)">
+            <label>Monthly Price in INR (₹) *</label>
+            <input type="number" step="1" min="0" id="edit-price-inr" name="price_inr" required oninput="autoCalculateEditUSD(this.value)">
           </div>
           <div>
-            <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;color:var(--ink);">Monthly Price in USD ($)</label>
-            <input type="number" step="0.5" min="0" id="edit-price-usd" name="price_usd" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+            <label>Monthly Price in USD ($)</label>
+            <input type="number" step="0.5" min="0" id="edit-price-usd" name="price_usd">
           </div>
           <div>
-            <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;color:var(--ink);">Base Period</label>
-            <select id="edit-period" name="period" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+            <label>Base Period</label>
+            <select id="edit-period" name="period">
               <option value="/mo">/mo (Monthly)</option>
               <option value="/yr">/yr (Yearly)</option>
               <option value="forever">forever (Lifetime)</option>
@@ -267,22 +267,22 @@
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding-top:8px;border-top:1px dashed var(--line2);">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding-top:8px;border-top:1px dashed var(--border);">
           <div>
-            <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;color:var(--ink);">Yearly Price in INR (₹) <span style="font-size:10px;color:var(--mute);">(Save ~17%)</span></label>
-            <input type="number" step="1" min="0" id="edit-price-inr-yearly" name="price_inr_yearly" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+            <label>Yearly Price in INR (₹) <span style="font-size:10px;color:var(--text-muted);">(Save ~17%)</span></label>
+            <input type="number" step="1" min="0" id="edit-price-inr-yearly" name="price_inr_yearly">
           </div>
           <div>
-            <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;color:var(--ink);">Yearly Price in USD ($)</label>
-            <input type="number" step="0.5" min="0" id="edit-price-usd-yearly" name="price_usd_yearly" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+            <label>Yearly Price in USD ($)</label>
+            <input type="number" step="0.5" min="0" id="edit-price-usd-yearly" name="price_usd_yearly">
           </div>
         </div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
         <div>
-          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Badge / Tag</label>
-          <select id="edit-tag" name="tag" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+          <label>Badge / Tag</label>
+          <select id="edit-tag" name="tag">
             <option value="">None</option>
             <option value="POPULAR">POPULAR</option>
             <option value="RECOMMENDED">RECOMMENDED</option>
@@ -295,55 +295,55 @@
           </select>
         </div>
         <div>
-          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Short Description</label>
-          <input type="text" id="edit-description" name="description" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+          <label>Short Description</label>
+          <input type="text" id="edit-description" name="description">
         </div>
       </div>
 
       <!-- Quota Limits Grid -->
-      <div style="background:#faf9f6;border:1.5px solid var(--line2);border-radius:10px;padding:12px;margin-bottom:14px;">
-        <div style="font-size:12.5px;font-weight:800;color:var(--ink);margin-bottom:8px;">Plan Quota & Intelligence Limits</div>
+      <div class="admin-modal-section">
+        <div class="admin-modal-section-title">Plan Quota & Intelligence Limits</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:2px;">Daily Requests</label>
-            <input type="number" min="1" id="edit-daily" name="daily" required style="width:100%;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;font-size:12.5px;">
+            <label>Daily Requests</label>
+            <input type="number" min="1" id="edit-daily" name="daily" required>
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:2px;">Monthly Requests</label>
-            <input type="number" min="1" id="edit-monthly" name="monthly" required style="width:100%;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;font-size:12.5px;">
+            <label>Monthly Requests</label>
+            <input type="number" min="1" id="edit-monthly" name="monthly" required>
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:2px;">Deep Reasoning Calls</label>
-            <input type="number" min="0" id="edit-strong-monthly" name="strong_monthly" required style="width:100%;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;font-size:12.5px;">
+            <label>Deep Reasoning Calls</label>
+            <input type="number" min="0" id="edit-strong-monthly" name="strong_monthly" required>
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--line2);">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);">
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:2px;">AI Image Generation</label>
-            <select id="edit-image-gen" name="image_gen" style="width:100%;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;font-size:12.5px;">
+            <label>AI Image Generation</label>
+            <select id="edit-image-gen" name="image_gen">
               <option value="yes">Yes (Enabled)</option>
               <option value="no">No (Disabled)</option>
             </select>
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:2px;">AI Images / Day</label>
-            <input type="number" min="0" id="edit-image-daily" name="image_daily" style="width:100%;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;font-size:12.5px;">
+            <label>AI Images / Day</label>
+            <input type="number" min="0" id="edit-image-daily" name="image_daily">
           </div>
         </div>
       </div>
 
       <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Feature Bullet Points (One per line)</label>
-        <textarea id="edit-features" name="features" rows="4" style="width:100%;padding:8px 10px;border:1.5.solid var(--line2);border-radius:8px;font-size:12.5px;font-family:inherit;"></textarea>
+        <label>Feature Bullet Points (One per line)</label>
+        <textarea id="edit-features" name="features" rows="4"></textarea>
       </div>
 
       <div style="margin-bottom:16px;">
-        <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;margin-right:16px;">
+        <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--text);cursor:pointer;margin-right:16px;">
           <input type="checkbox" id="edit-is-active" name="is_active" value="yes" checked>
           <span>Plan is Active</span>
         </label>
-        <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;">
+        <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--text);cursor:pointer;">
           <input type="checkbox" id="edit-is-default" name="is_default" value="yes">
           <span>Set as Default Plan for new signups</span>
         </label>
@@ -360,27 +360,27 @@
 <!-- ========================================================================= -->
 <!-- 3. DELETE PLAN CONFIRMATION MODAL                                         -->
 <!-- ========================================================================= -->
-<div id="deletePlanModal" class="modal-backdrop" hidden style="position:fixed;inset:0;background:rgba(18,18,18,0.55);backdrop-filter:blur(3px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;">
-  <div style="background:#fff;border:2px solid var(--ink);border-radius:16px;box-shadow:6px 6px 0 var(--ink);width:100%;max-width:500px;padding:24px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1.5px solid var(--line2);padding-bottom:12px;">
-      <h3 style="margin:0;font:800 20px var(--display);color:#b91c1c;">Confirm Delete Plan</h3>
-      <button type="button" onclick="closeDeletePlanModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--mute);">&times;</button>
+<div id="deletePlanModal" class="modal-backdrop" hidden>
+  <div class="admin-modal-box modal-sm">
+    <div class="admin-modal-header">
+      <h3 style="color:#ef4444;">Confirm Delete Plan</h3>
+      <button type="button" class="btn-close" onclick="closeDeletePlanModal()" aria-label="Close modal">&times;</button>
     </div>
 
     <form id="deletePlanForm" method="post" action="">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <p style="font-size:13.5px;color:var(--ink);margin-bottom:14px;">
+      <p style="font-size:13.5px;color:var(--text);margin-bottom:14px;">
         Are you sure you want to delete plan <b id="delete-plan-name"></b> (<span id="delete-plan-code" style="font-family:var(--mono);"></span>)?
       </p>
 
-      <div id="delete-default-warning" style="display:none;background:#fef2f2;border:1.5px solid #f87171;border-radius:8px;padding:10px;margin-bottom:14px;color:#991b1b;font-size:12px;line-height:1.4;">
-        ⚠️ <b>This plan is currently the default plan.</b> If this is the only default plan, you cannot delete it until another plan is set as default.
+      <div id="delete-default-warning" class="flash err" style="display:none; margin-bottom:14px; font-size:12px;">
+        <b>Warning: This plan is currently the default plan.</b> If this is the only default plan, you cannot delete it until another plan is set as default.
       </div>
 
       <div style="margin-bottom:18px;">
-        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Replacement Plan for Users *</label>
-        <p style="font-size:11.5px;color:var(--mute);margin:0 0 8px;">Select a replacement plan. Any users currently assigned to this plan will be safely moved to the replacement plan in one transaction.</p>
-        <select id="replacement-plan-select" name="replacement_plan_id" required style="width:100%;padding:9px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+        <label>Replacement Plan for Users *</label>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:0 0 8px;">Select a replacement plan. Any users currently assigned to this plan will be safely moved to the replacement plan in one transaction.</p>
+        <select id="replacement-plan-select" name="replacement_plan_id" required>
           <option value="">-- Choose replacement plan --</option>
           {% for other in plans %}
           <option value="{{ other.id }}" data-id="{{ other.id }}">{{ other.label }} ({{ other.code }}) - ₹{{ other.price_inr|int }}</option>

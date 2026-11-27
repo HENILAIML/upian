@@ -1,97 +1,127 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Sign in' if mode == 'login' else 'Create account' }} · Upian AI{% endblock %}
+{% block title %}{{ 'Sign In' if mode == 'login' else 'Create Account' }} · Upian AI{% endblock %}
 {% block body_class %}auth{% endblock %}
 {% block body %}
 <div class="auth-wrap">
   <section class="auth-art">
-    <div class="brand">Upian AI</div>
-    <h1>Every prompt goes to the model it needs.</h1>
-    <p>Quick questions run on a fast, inexpensive model. Hard problems go to the strongest one. After each answer you can see which model ran, how many tokens it used and how long it took.</p>
-    <svg class="route-art" viewBox="0 0 380 210" role="img" aria-label="A prompt splits into a strong-model lane and a light-model lane">
-      <path class="lane s" d="M24 105 H120 C165 105 165 52 210 52 H350"/>
-      <path class="lane w" d="M24 105 H120 C165 105 165 158 210 158 H350"/>
-      <circle class="node" cx="24" cy="105" r="6"/>
+    <div class="brand">
+      <svg class="brand-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+        <path d="M2 17l10 5 10-5"></path>
+        <path d="M2 12l10 5 10-5"></path>
+      </svg>
+      <span>Upian AI</span>
+    </div>
+    <h1>Intelligent routing for every prompt.</h1>
+    <p>Simple requests run on fast models, while deep reasoning problems are routed to stronger neural architectures. Monitor latency, token efficiency, and model decisions transparently.</p>
+    <svg class="route-art" viewBox="0 0 380 210" role="img" aria-label="Prompt routing schematic">
+      <path class="lane s" d="M24 105 H120 C165 105 165 52 210 52 H350" stroke-width="2.5"/>
+      <path class="lane w" d="M24 105 H120 C165 105 165 158 210 158 H350" stroke-width="2.5"/>
+      <circle class="node input-node" cx="24" cy="105" r="6"/>
       <circle class="node s" cx="350" cy="52" r="6"/>
       <circle class="node w" cx="350" cy="158" r="6"/>
-      <text x="24" y="132">Your prompt</text>
-      <text x="210" y="36">Strong model: hard problems</text>
-      <text x="210" y="184">Light model: quick answers</text>
+      <text class="route-label text-input" x="24" y="134">Input Prompt</text>
+      <text class="route-label text-reasoning" x="210" y="38">Reasoning Tier</text>
+      <text class="route-label text-fast" x="210" y="184">Fast Tier</text>
     </svg>
   </section>
+
   <section class="auth-form">
-    <form method="post" autocomplete="on">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <h2>{{ 'Sign in' if mode == 'login' else 'Create your account' }}</h2>
-      <p class="sub">{{ 'Welcome back.' if mode == 'login' else 'The free plan includes 20 requests a day.' }}</p>
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          {% for category, message in messages %}
-            <div class="flash {{ category }}" role="alert">{{ message }}</div>
-          {% endfor %}
-        {% endif %}
-      {% endwith %}
-      {% if error %}<div class="flash err" role="alert">{{ error }}</div>{% endif %}
-
-      {% if google_client_id %}
-      <div class="google-auth-box">
-        <a href="{{ url_for('auth_google_login', next=request.args.get('next')) }}" class="btn-google block" id="google-login-btn">
-          <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-          </svg>
-          <span>Continue with Google</span>
-        </a>
-        <div class="auth-divider">
-          <span>or continue with email</span>
-        </div>
+    <div class="auth-card">
+      <div class="auth-tabs" role="tablist">
+        <a href="{{ url_for('login') }}" class="auth-tab {{ 'active' if mode == 'login' else '' }}" role="tab" aria-selected="{{ 'true' if mode == 'login' else 'false' }}">Sign In</a>
+        <a href="{{ url_for('register') }}" class="auth-tab {{ 'active' if mode == 'register' else '' }}" role="tab" aria-selected="{{ 'true' if mode == 'register' else 'false' }}">Create Account</a>
       </div>
-      {% endif %}
 
-      {% if mode == 'register' %}
-      <label class="field"><span>Name</span><input type="text" name="name" required maxlength="80" autocomplete="name" value="{{ request.form.get('name', '') }}"></label>
-      {% endif %}
-      <label class="field"><span>Email</span><input type="email" name="email" required autocomplete="email" value="{{ request.form.get('email', '') }}"></label>
-      <div class="field">
-        <label for="password-input"><span>Password</span></label>
-        <div class="password-input-wrap">
-          <input id="password-input" type="password" name="password" required minlength="{{ 8 if mode == 'register' else 1 }}" autocomplete="{{ 'new-password' if mode == 'register' else 'current-password' }}">
-          <button type="button" class="btn-toggle-password" id="toggle-password" aria-label="Show password" title="Show password">
-            <svg class="eye-icon eye-show" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-            <svg class="eye-icon eye-hide" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none;">
-              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-              <line x1="1" y1="1" x2="23" y2="23"></line>
-            </svg>
-          </button>
-        </div>
-      </div>
-      <button class="btn primary block" type="submit">{{ 'Sign in' if mode == 'login' else 'Create account' }}</button>
-      <div class="alt-wrap">
-        <p class="alt">
-          {% if mode == 'login' %}
-            <span class="alt-text">New here?</span>
-            <a href="{{ url_for('register') }}" class="alt-link">
-              <span>Create an account</span>
-              <svg class="alt-arrow" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M3 8h10M9 4l4 4-4 4"/>
-              </svg>
-            </a>
-          {% else %}
-            <span class="alt-text">Already registered?</span>
-            <a href="{{ url_for('login') }}" class="alt-link">
-              <span>Sign in</span>
-              <svg class="alt-arrow" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M3 8h10M9 4l4 4-4 4"/>
-              </svg>
-            </a>
+      <form method="post" autocomplete="on">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h2>{{ 'Sign In' if mode == 'login' else 'Create Account' }}</h2>
+        <p class="sub">{{ 'Enter your credentials to access your account.' if mode == 'login' else 'Get started with free daily AI routing, file processing, and smart models.' }}</p>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash {{ category }}" role="alert">{{ message }}</div>
+            {% endfor %}
           {% endif %}
-        </p>
-      </div>
-    </form>
+        {% endwith %}
+        {% if error %}<div class="flash err" role="alert">{{ error }}</div>{% endif %}
+
+        {% if google_client_id %}
+        <div class="google-auth-box">
+          <a href="{{ url_for('auth_google_login', next=request.args.get('next')) }}" class="btn-google block" id="google-login-btn">
+            <svg class="google-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+            </svg>
+            <span>{{ 'Sign up with Google' if mode == 'register' else 'Continue with Google' }}</span>
+          </a>
+          <div class="auth-divider">
+            <span>or with email</span>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if mode == 'register' %}
+        <label class="field">
+          <span>Full Name</span>
+          <input type="text" name="name" required maxlength="80" autocomplete="name" placeholder="Enter your full name" value="{{ request.form.get('name', '') }}">
+        </label>
+        {% endif %}
+        
+        <label class="field">
+          <span>Email Address</span>
+          <input type="email" name="email" required autocomplete="email" placeholder="name@example.com" value="{{ request.form.get('email', '') }}">
+        </label>
+
+        <div class="field">
+          <label for="password-input"><span>Password</span></label>
+          <div class="password-input-wrap">
+            <input id="password-input" type="password" name="password" required minlength="{{ 8 if mode == 'register' else 1 }}" autocomplete="{{ 'new-password' if mode == 'register' else 'current-password' }}" placeholder="{{ 'At least 8 characters' if mode == 'register' else 'Enter password' }}">
+            <button type="button" class="btn-toggle-password" id="toggle-password" aria-label="Show password" title="Show password">
+              <svg class="eye-icon eye-show" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg class="eye-icon eye-hide" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none;">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
+          {% if mode == 'register' %}
+          <span class="field-hint">Must be at least 8 characters</span>
+          {% endif %}
+        </div>
+
+        {% if mode == 'register' %}
+        <div class="register-perks">
+          <div class="perk-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span>20 free requests every day</span>
+          </div>
+          <div class="perk-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span>Automated speed & deep reasoning model routing</span>
+          </div>
+        </div>
+        {% endif %}
+
+        <button class="btn primary block auth-submit-btn" type="submit">{{ 'Sign In' if mode == 'login' else 'Create Free Account' }}</button>
+        
+        <div class="alt-wrap">
+          {% if mode == 'login' %}
+            <span>Don't have an account?</span>
+            <a href="{{ url_for('register') }}" class="link">Create an account</a>
+          {% else %}
+            <span>Already have an account?</span>
+            <a href="{{ url_for('login') }}" class="link">Sign in</a>
+          {% endif %}
+        </div>
+      </form>
+    </div>
   </section>
 </div>
 
@@ -154,8 +184,7 @@
       }
     })
     .catch(function(err) {
-      console.error("Google sign-in error:", err);
-      window.location.href = "{{ url_for('auth_google_login', next=request.args.get('next')) }}";
+      console.warn("Google One-Tap sign-in error:", err);
     });
   }
 
@@ -169,7 +198,7 @@
           cancel_on_tap_outside: true
         });
       } catch (e) {
-        console.warn("Google One-Tap initialization notice:", e);
+        console.warn("Google One-Tap notice:", e);
       }
     }
   });

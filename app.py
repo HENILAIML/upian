@@ -332,7 +332,7 @@ def _throttled(ip):
     now = time.time()
     recent = [t for t in _failed_logins.get(ip, []) if now - t < 600]
     _failed_logins[ip] = recent
-    return len(recent) >= 10
+    return len(recent) >= 25
 
 
 def _sign_in(user):
@@ -436,18 +436,39 @@ def register():
     return render_template("auth.html", mode="register", error=error)
 
 
-@app.post("/logout")
+@app.route("/logout", methods=["GET", "POST"])
 def logout():
     session.clear()
     return redirect(url_for("login"))
 
 
-# ----------------------------------------------------------------------------- user pages
-@app.get("/")
-@login_required
-def home():
+# ----------------------------------------------------------------------------- 5 standalone website UIs & system selector
+UI_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "ui_settings.json")
+
+def get_active_ui_site():
+    try:
+        if os.path.exists(UI_SETTINGS_FILE):
+            with open(UI_SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                val = int(data.get("active_site", 1))
+                if val in [1, 2, 3, 4, 5]:
+                    return val
+    except Exception:
+        pass
+    return 1
+
+def set_active_ui_site(site_id):
+    try:
+        with open(UI_SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump({"active_site": int(site_id)}, f)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to set active UI site: {e}")
+        return False
+
+def _build_boot():
     def_plan = plans_service.get_default_plan()
-    boot = {
+    return {
         "uid": g.user.id,
         "plan": g.user.plan,
         "default_plan": def_plan.code if def_plan else "free",
@@ -455,7 +476,43 @@ def home():
         "usage": get_usage(g.user),
         "threshold": Config.CLASSIFIER_THRESHOLD,
     }
-    return render_template("chat.html", boot=boot, max_chars=Config.MAX_PROMPT_CHARS)
+
+def _render_site_template(site_num):
+    boot = _build_boot()
+    template_name = f"sites/site{site_num}.html"
+    return render_template(template_name, boot=boot, max_chars=Config.MAX_PROMPT_CHARS, site_num=site_num)
+
+# ----------------------------------------------------------------------------- user pages
+@app.get("/")
+@login_required
+def home():
+    active_site = get_active_ui_site()
+    return _render_site_template(active_site)
+
+@app.get("/site1")
+@login_required
+def view_site1():
+    return _render_site_template(1)
+
+@app.get("/site2")
+@login_required
+def view_site2():
+    return _render_site_template(2)
+
+@app.get("/site3")
+@login_required
+def view_site3():
+    return _render_site_template(3)
+
+@app.get("/site4")
+@login_required
+def view_site4():
+    return _render_site_template(4)
+
+@app.get("/site5")
+@login_required
+def view_site5():
+    return _render_site_template(5)
 
 
 @app.get("/activity")
@@ -895,7 +952,12 @@ def auth_google_login():
     state = secrets.token_urlsafe(32)
     session["google_oauth_state"] = state
 
-    redirect_uri = Config.GOOGLE_REDIRECT_URI or url_for("auth_google_callback", _external=True)
+    redirect_uri = Config.GOOGLE_REDIRECT_URI
+    if not redirect_uri:
+        redirect_uri = url_for("auth_google_callback", _external=True)
+        if "127.0.0.1:" in redirect_uri:
+            redirect_uri = redirect_uri.replace("127.0.0.1:", "localhost:")
+    session["google_oauth_redirect_uri"] = redirect_uri
 
     params = {
         "client_id": Config.GOOGLE_CLIENT_ID,
@@ -927,8 +989,9 @@ def auth_google_callback():
     if request.method == "GET":
         error = request.args.get("error")
         if error:
-            logger.warning("Google OAuth error response: %s", error)
-            flash("Google sign-in was cancelled or encountered an error.", "err")
+            error_desc = request.args.get("error_description") or error
+            logger.warning("Google OAuth error response: %s (%s)", error, error_desc)
+            flash(f"Google sign-in was not completed: {error_desc}", "err")
             return redirect(url_for("login"))
 
         code = request.args.get("code")
@@ -943,7 +1006,11 @@ def auth_google_callback():
             flash("Security verification failed during Google sign-in. Please try again.", "err")
             return redirect(url_for("login"))
 
-        redirect_uri = Config.GOOGLE_REDIRECT_URI or url_for("auth_google_callback", _external=True)
+        redirect_uri = session.pop("google_oauth_redirect_uri", None) or Config.GOOGLE_REDIRECT_URI
+        if not redirect_uri:
+            redirect_uri = url_for("auth_google_callback", _external=True)
+            if "127.0.0.1:" in redirect_uri:
+                redirect_uri = redirect_uri.replace("127.0.0.1:", "localhost:")
 
         token_url = "https://oauth2.googleapis.com/token"
         token_payload = {
@@ -958,7 +1025,11 @@ def auth_google_callback():
             token_resp = requests.post(token_url, data=token_payload, timeout=10)
             if token_resp.status_code != 200:
                 logger.error("Google token exchange failed (%s): %s", token_resp.status_code, token_resp.text)
-                flash("Failed to authenticate with Google. Please check your credentials.", "err")
+                try:
+                    err_info = token_resp.json().get("error_description", token_resp.text)
+                except Exception:
+                    err_info = token_resp.text
+                flash(f"Google authentication failed: {err_info}", "err")
                 return redirect(url_for("login"))
 
             token_data = token_resp.json()
@@ -1804,6 +1875,23 @@ def admin_stats():
 @admin_required
 def admin_home():
     return render_template("admin_dashboard.html", active="overview")
+
+
+@app.get("/admin/ui-selector")
+@admin_required
+def admin_ui_selector():
+    active_site = get_active_ui_site()
+    return render_template("admin_ui_selector.html", active_site=active_site, active="ui_selector")
+
+
+@app.post("/admin/ui-selector/set")
+@admin_required
+def admin_set_ui():
+    site_id = request.form.get("site_id", type=int)
+    if site_id in [1, 2, 3, 4, 5]:
+        set_active_ui_site(site_id)
+        flash(f"Website Design {site_id} is now activated as the live interface for all users!")
+    return redirect(url_for("admin_ui_selector"))
 
 
 @app.get("/admin/api/stats")

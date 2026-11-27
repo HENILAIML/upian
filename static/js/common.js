@@ -114,16 +114,24 @@ function renderMd(src) {
   var parts = String(src).split('```');
   return parts.map(function (p, i) {
     if (i % 2 === 1) {
-      var nl = p.indexOf('\n'), code = p, lang = 'code';
+      var nl = p.indexOf('\n'), code = p, lang = '';
       if (nl > -1 && /^[\w+#.\-]*$/.test(p.slice(0, nl).trim())) {
         var detected = p.slice(0, nl).trim();
         if (detected) lang = detected;
         code = p.slice(nl + 1);
       }
       var cleanCode = code.replace(/\n$/, '');
+      if (!cleanCode.trim()) {
+        return '';
+      }
+      var langDisplay = '';
+      var lowLang = (lang || '').toLowerCase();
+      if (lowLang && lowLang !== 'text' && lowLang !== 'code' && lowLang !== 'plain') {
+        langDisplay = '<span class="code-lang">' + esc(lang) + '</span>';
+      }
       return '<div class="code-block-wrap">' +
         '<div class="code-block-head">' +
-          '<span class="code-lang">' + esc(lang) + '</span>' +
+          langDisplay +
           '<button type="button" class="btn-copy-code" title="Copy code to clipboard">' +
             '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> ' +
             '<span>Copy</span>' +
@@ -138,13 +146,13 @@ function renderMd(src) {
 
 /* Global copy button handler for fenced code blocks (Clipboard API + fallback) */
 document.addEventListener('click', function (e) {
-  var btn = e.target.closest('.btn-copy-code');
+  var btn = e.target.closest('.btn-copy-code, .code-copy-btn');
   if (!btn) return;
   e.preventDefault();
   e.stopPropagation();
 
   var wrap = btn.closest('.code-block-wrap');
-  var codeEl = wrap ? wrap.querySelector('pre code') : null;
+  var codeEl = wrap ? wrap.querySelector('pre code, pre') : null;
   var rawText = codeEl ? codeEl.textContent : '';
 
   function onCopied() {
@@ -241,7 +249,12 @@ function renderUsage(u) {
   if (topPlanName) topPlanName.textContent = u.plan_label;
   var topPlanCount = document.getElementById('top-plan-count');
   if (topPlanCount && u.day) {
-    topPlanCount.textContent = fmtNum(u.day.used) + ' of ' + fmtNum(u.day.limit);
+    topPlanCount.textContent = fmtNum(u.day.used) + ' / ' + fmtNum(u.day.limit);
+  }
+  var topPlanBarFill = document.getElementById('top-plan-bar-fill');
+  if (topPlanBarFill && u.day && u.day.limit) {
+    var pct = Math.min(100, Math.round((u.day.used / u.day.limit) * 100));
+    topPlanBarFill.style.width = pct + '%';
   }
 }
 (function () {
@@ -292,18 +305,139 @@ function renderUsage(u) {
     });
 
     document.addEventListener('click', function (e) {
-      if (!planDrop.hidden && !planDrop.contains(e.target) && e.target !== planBtn) {
+      if (!planDrop.hidden && !planDrop.contains(e.target) && !planBtn.contains(e.target)) {
         planDrop.hidden = true;
         if (planWidget) planWidget.classList.remove('open');
       }
     });
   }
 
-  // Clear any legacy theme preference
+  // Theme management: Instant Black / White theme toggle with persistence
+  (function () {
+    function applyTheme(theme) {
+      if (theme !== 'black' && theme !== 'white') theme = 'white';
+      document.documentElement.setAttribute('data-theme', theme);
+      try { localStorage.setItem('upian_theme', theme); } catch (e) {}
+      document.querySelectorAll('.theme-switch-btn').forEach(function (btn) {
+        if (btn.getAttribute('data-theme-val') === theme) {
+          btn.classList.add('active');
+          btn.setAttribute('aria-pressed', 'true');
+        } else {
+          btn.classList.remove('active');
+          btn.setAttribute('aria-pressed', 'false');
+        }
+      });
+    }
+
+    var current = 'white';
+    try {
+      var stored = localStorage.getItem('upian_theme');
+      if (stored === 'black' || stored === 'white') current = stored;
+    } catch (e) {}
+    applyTheme(current);
+    window.setAppTheme = applyTheme;
+
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('.theme-switch-btn');
+      if (btn) {
+        var val = btn.getAttribute('data-theme-val');
+        if (val) {
+          e.preventDefault();
+          applyTheme(val);
+        }
+      }
+    });
+  })();
+})();
+
+/* Global Sidebar and Live Panel Drawer Controller */
+(function () {
+  var _sidebarLock = 0;
+  var _liveLock = 0;
+
+  function setSidebarCollapsed(col) {
+    var shell = document.querySelector('.shell') || document.getElementById('app-shell');
+    var side = document.getElementById('sidebar');
+    if (!side) return;
+    if (col) {
+      side.classList.add('collapsed');
+      if (shell) shell.classList.add('sidebar-collapsed');
+    } else {
+      side.classList.remove('collapsed');
+      if (shell) shell.classList.remove('sidebar-collapsed');
+    }
+    try { localStorage.setItem('upian_sidebar_collapsed', col ? '1' : '0'); } catch (e) {}
+    var btn = document.getElementById('sidebar-toggle');
+    if (btn) btn.setAttribute('aria-expanded', !col);
+  }
+
+  function setLiveCollapsed(col) {
+    var shell = document.querySelector('.shell') || document.getElementById('app-shell');
+    var live = document.getElementById('live-panel');
+    if (!live) return;
+    if (col) {
+      live.classList.add('collapsed');
+      if (shell) shell.classList.add('live-collapsed');
+    } else {
+      live.classList.remove('collapsed');
+      if (shell) shell.classList.remove('live-collapsed');
+    }
+    try { localStorage.setItem('upian_live_collapsed', col ? '1' : '0'); } catch (e) {}
+    var btn = document.getElementById('live-toggle');
+    if (btn) {
+      btn.setAttribute('aria-expanded', !col);
+      if (col) btn.classList.add('panel-off');
+      else btn.classList.remove('panel-off');
+    }
+  }
+
+  window.toggleLeftSidebar = function () {
+    var now = Date.now();
+    if (now - _sidebarLock < 250) return;
+    _sidebarLock = now;
+    var side = document.getElementById('sidebar');
+    var shell = document.querySelector('.shell') || document.getElementById('app-shell');
+    var isCol = (side && side.classList.contains('collapsed')) || (shell && shell.classList.contains('sidebar-collapsed'));
+    setSidebarCollapsed(!isCol);
+  };
+
+  window.toggleRightActivity = function () {
+    var now = Date.now();
+    if (now - _liveLock < 250) return;
+    _liveLock = now;
+    var live = document.getElementById('live-panel');
+    var shell = document.querySelector('.shell') || document.getElementById('app-shell');
+    var isCol = (live && live.classList.contains('collapsed')) || (shell && shell.classList.contains('live-collapsed'));
+    setLiveCollapsed(!isCol);
+  };
+
+  // Restore saved collapse states on boot:
   try {
-    localStorage.removeItem('upian_theme');
-    document.documentElement.removeAttribute('data-theme');
+    if (localStorage.getItem('upian_sidebar_collapsed') === '1') {
+      setSidebarCollapsed(true);
+    }
+    if (localStorage.getItem('upian_live_collapsed') === '1') {
+      setLiveCollapsed(true);
+    }
   } catch (e) {}
+
+  // Single global click listener using event delegation:
+  document.addEventListener('click', function (e) {
+    var sideBtn = e.target.closest('#sidebar-toggle, .sidebar-dock-topbar-btn');
+    if (sideBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.toggleLeftSidebar();
+      return;
+    }
+    var liveBtn = e.target.closest('#live-toggle, .activity-arrow-btn, #btn-close-live-arrow, .btn-live-close-arrow');
+    if (liveBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.toggleRightActivity();
+      return;
+    }
+  });
 })();
 
 /* Nickname editing in the sidebar user card */
@@ -447,9 +581,9 @@ function renderUsage(u) {
     var container = document.getElementById('custom-extra-features-container');
     if (!container) return;
     container.innerHTML = customExtraFeatures.map(function (f) {
-      return '<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(238,127,53,0.18);border:1px solid #ee7f35;color:#ee7f35;padding:3px 9px;border-radius:14px;font-size:12px;font-weight:600;">' +
-             '★ ' + f +
-             ' <button type="button" onclick="removeCustomExtraFeature(\'' + f.replace(/'/g, "\\'") + '\')" style="background:none;border:none;color:#ee7f35;cursor:pointer;font-weight:bold;padding:0 2px;">&times;</button>' +
+      return '<span class="chip" style="font-size:12px;">' +
+             f +
+             ' <button type="button" onclick="removeCustomExtraFeature(\'' + f.replace(/'/g, "\\'") + '\')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-weight:bold;padding:0 2px;">&times;</button>' +
              '</span>';
     }).join('');
   }
@@ -674,7 +808,7 @@ function renderUsage(u) {
     cbs.forEach(function (cb) {
       total += parseInt(cb.getAttribute('data-price') || '0', 10);
       var name = cb.getAttribute('data-name') || cb.value;
-      pills.push('<span class="dyn-feat-pill active">✓ ' + name + '</span>');
+      pills.push('<span class="dyn-feat-pill active">' + name + '</span>');
     });
 
     var isYearly = (window.currentBillingCycle === 'yearly');
@@ -823,7 +957,7 @@ function renderUsage(u) {
     var newLabel = data.plan_label || (newPlan === 'free' ? 'Free' : (newPlan === 'pro_plus' ? 'Pro Plus' : 'Pro'));
     if (badge) {
       badge.className = 'who-plan-badge ' + newPlan;
-      badge.innerHTML = '<span id="who-plan-label">' + newLabel + '</span>' + (newPlan === 'free' ? '<span class="badge-upgrade-cue">⚡ Upgrade</span>' : '');
+      badge.innerHTML = '<span id="who-plan-label">' + newLabel + '</span>' + (newPlan === 'free' ? '<span class="badge-upgrade-cue">Upgrade</span>' : '');
     }
     var planNameEl = document.getElementById('plan-name');
     if (planNameEl) {

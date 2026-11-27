@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+{% block title %}Upian · Intelligent AI Gateway{% endblock %}
+{% block body_class %}app site5-body copilot-body{% endblock %}
+{% block body %}
+<!-- Drag and Drop Overlay (Hidden by default, active only on dragover) -->
+<div id="drop-overlay" class="drop-overlay">Drop files or images to attach</div>
+
+<!-- Main App Shell -->
+<div class="copilot-shell shell" id="app-shell" data-ui="5">
+  
+  <!-- Left Sidebar (Collapsible with Arrow) -->
+  <aside class="copilot-sidebar side" id="sidebar">
+    <!-- Brand / Header with Left Arrow Toggle -->
+    <div class="copilot-sidebar-header">
+      <div class="copilot-brand">
+        <div class="upian-brand-logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+            <path d="M2 17l10 5 10-5"></path>
+            <path d="M2 12l10 5 10-5"></path>
+          </svg>
+        </div>
+        <span class="upian-brand-text">Upian</span>
+      </div>
+      <!-- Left Arrow Button to Collapse Sidebar -->
+      <button type="button" class="copilot-sidebar-toggle-btn" id="sidebar-toggle-btn" onclick="window.toggleLeftSidebar()" title="Collapse left sidebar (Arrow)" aria-label="Collapse sidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Hidden alias for chat.js compatibility -->
+    <button type="button" id="sidebar-toggle" style="display:none;"></button>
+    <button type="button" id="side-new-chat-btn" style="display:none;"></button>
+
+    <!-- Navigation Items In Line (One by One Stacked) -->
+    <nav class="copilot-nav-list">
+      <a href="{{ url_for('home') }}" class="copilot-nav-item active" id="nav-item-chat" title="Chat">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <span>Chat</span>
+        <button type="button" class="nav-new-pill" id="new-chat-btn" title="Start a fresh conversation">+ New</button>
+      </a>
+
+      <a href="{{ url_for('plans_page') }}" class="copilot-nav-item" id="btn-side-upgrade" onclick="if(window.openPlanModal){event.preventDefault();window.openPlanModal();}" title="Plans & Pricing">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+          <line x1="2" y1="10" x2="22" y2="10"></line>
+        </svg>
+        <span>Plans & Pricing</span>
+      </a>
+
+      <a href="{{ url_for('files_page') }}" class="copilot-nav-item" title="My Files">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="16" y1="13" x2="8" y2="13"></line>
+        </svg>
+        <span>My Files</span>
+      </a>
+
+      <a href="{{ url_for('activity') }}" class="copilot-nav-item" title="Activity Log">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+        </svg>
+        <span>Activity</span>
+      </a>
+
+      {% if me.is_admin %}
+      <a href="{{ url_for('admin_home') }}" class="copilot-nav-item" title="Admin Control Center">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9"></path>
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+        <span>Admin</span>
+      </a>
+      {% endif %}
+    </nav>
+
+    <!-- Section Heading & History List -->
+    <div class="side-history-section" id="side-history-section" style="display:flex; flex-direction:column; flex:1; overflow:hidden; margin-top:14px;">
+      <div class="copilot-sidebar-section-title">Recent Work Topics</div>
+      <div class="copilot-history-list side-history-list" id="side-history-list">
+        <div class="history-empty" style="padding:10px 4px; font-size:12px; color:var(--text-muted);">No previous topics yet.</div>
+      </div>
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div class="copilot-sidebar-footer">
+      <div class="copilot-user-profile-row">
+        <div class="copilot-user-info">
+          <div class="copilot-user-avatar">{{ (me.name[0] if me.name else 'U')|upper }}</div>
+          <div class="copilot-user-details">
+            <span class="who-name" id="who-display-name" title="Click edit to change nickname">{{ me.name }}</span>
+            <button type="button" class="btn-nickname-edit" id="btn-edit-nickname" title="Edit nickname" aria-label="Edit nickname">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="copilot-footer-actions">
+          <button type="button" class="copilot-icon-action" id="theme-toggle-copilot" onclick="window.toggleCopilotTheme()" title="Toggle Dark / Light Theme" aria-label="Toggle theme">
+            <svg class="theme-sun-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </button>
+          <a href="{{ url_for('logout') }}" class="copilot-icon-action copilot-logout-action" title="Sign out" aria-label="Sign out">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+          </a>
+        </div>
+      </div>
+      <div class="nickname-edit-box" id="nickname-edit-box" hidden style="margin-top:6px;">
+        <input type="text" id="nickname-input" class="nickname-input" value="{{ me.name }}" maxlength="60" placeholder="Enter nickname" style="font-size:12px; padding:6px 8px; width:100%; box-sizing:border-box; margin-bottom:6px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text);">
+        <div style="display:flex; gap:6px;">
+          <button type="button" id="nickname-save-btn" class="btn sm primary" style="flex:1;">Save</button>
+          <button type="button" id="nickname-cancel-btn" class="btn sm" style="flex:1;">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Workspace -->
+  <main class="copilot-main chat" id="chat-dropzone">
+    <!-- Workspace Topbar -->
+    <header class="copilot-topbar" id="chat-topbar">
+      <!-- Left: Sidebar toggle arrow button -->
+      <div class="topbar-left" style="display:flex; align-items:center;">
+        <button type="button" class="sidebar-dock-topbar-btn" id="topbar-sidebar-arrow" onclick="window.toggleLeftSidebar()" title="Toggle sidebar (Expand/Collapse)" aria-label="Toggle sidebar">
+          <svg id="topbar-arrow-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Center: Plan & Context Window Dynamic Bars (Accordion / One at a time) -->
+      <div class="topbar-center" id="topbar-center">
+        <!-- Dynamic Plan Meter Pill Widget -->
+        <div class="topbar-plan-widget" id="topbar-plan-widget">
+          <button type="button" class="dynamic-meter-pill topbar-plan-btn" id="topbar-plan-btn" title="Click to view daily quota & plans" aria-label="View plan quota and limits">
+            <span class="meter-icon" style="color:#ff6a00;">⚡</span>
+            <span class="meter-label" id="top-plan-name">{{ PLANS[me.plan].label }}</span>
+            <div class="meter-bar-track" title="Daily request quota usage">
+              <div class="meter-bar-fill" id="top-plan-bar-fill" style="width: 20%;"></div>
+            </div>
+            <span class="meter-count" id="top-plan-count">--</span>
+            <span class="meter-arrow">▾</span>
+          </button>
+          <div class="topbar-plan-dropdown" id="topbar-plan-dropdown" hidden>
+            <section class="usage" id="usage-box" onclick="if(window.openPlanModal){window.openPlanModal();}else{location.href='{{ url_for('plans_page') }}';}" style="cursor: pointer;" title="View all plans">
+              <div class="usage-head"><span>Plan</span><b id="plan-name">{{ PLANS[me.plan].label }}</b></div>
+              <div id="meters"></div>
+              <p class="hint" id="reset-note"></p>
+              <div class="usage-upgrade-action">
+                <span>View & Upgrade Plans →</span>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <!-- Mount point for Context Window Dynamic Bar Pill -->
+        <div id="ctx-mount"></div>
+      </div>
+
+      <!-- Right Actions: Export and Right-Side Live Activity Arrow Toggle -->
+      <div class="topbar-right" style="display:flex; align-items:center; gap:8px;">
+        <!-- Export Button -->
+        <button type="button" class="copilot-export-btn" id="copilot-export-btn" onclick="window.exportCopilotChat()" title="Export current chat to Markdown">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Export</span>
+        </button>
+
+        <!-- Right Side Activity Arrow Toggle -->
+        <button type="button" class="activity-arrow-btn live-btn" id="live-toggle" onclick="window.toggleRightActivity()" title="Toggle Live Activity panel (Slide right/left)" aria-label="Toggle Live Activity">
+          <span>Activity</span>
+          <svg id="activity-arrow-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Scrollable Messages Container -->
+    <div id="scroller" class="copilot-scroller scroller">
+      <div class="copilot-thread col" id="thread">
+        
+        <!-- Empty State Hero -->
+        <div class="copilot-empty-hero empty" id="empty">
+          <!-- Gradient Star Icon -->
+          <div class="copilot-star-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+          </div>
+
+          <!-- Hero Typography -->
+          <h1 class="copilot-hero-title" id="empty-title">Your everyday AI companion for work</h1>
+          <p class="copilot-hero-subtitle" id="empty-subtitle">Draft documents, summarize spreadsheets, and accelerate day-to-day decisions.</p>
+
+          <!-- Conversation Style Selector -->
+          <div class="copilot-style-selector">
+            <span class="copilot-style-label">Choose a conversation style</span>
+            <div class="copilot-style-pills" role="radiogroup" aria-label="Conversation style">
+              <button type="button" class="copilot-style-pill" data-style="creative" onclick="window.setConversationStyle('creative')">More Creative</button>
+              <button type="button" class="copilot-style-pill active" data-style="balanced" onclick="window.setConversationStyle('balanced')">More Balanced</button>
+              <button type="button" class="copilot-style-pill" data-style="precise" onclick="window.setConversationStyle('precise')">More Precise</button>
+            </div>
+          </div>
+
+          <!-- Action Starter Cards -->
+          <div class="copilot-starters-grid starters" id="empty-starters">
+            <div class="copilot-starter-card starter" data-p="Draft an executive leadership email summarizing key milestones, timelines, and risk mitigations for VP review.">
+              <div class="copilot-starter-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                  <polyline points="22,6 12,13 2,6"></polyline>
+                </svg>
+              </div>
+              <div class="copilot-starter-content">
+                <span class="copilot-starter-title">Draft leadership email</span>
+                <span class="copilot-starter-desc">Summarize key milestones and risk mitigations for VP review.</span>
+              </div>
+            </div>
+
+            <div class="copilot-starter-card starter" data-p="Transform these meeting notes into an action matrix with owners, deadlines, and dependencies: ">
+              <div class="copilot-starter-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="9 11 12 14 22 4"></polyline>
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                </svg>
+              </div>
+              <div class="copilot-starter-content">
+                <span class="copilot-starter-title">Meeting notes to action matrix</span>
+                <span class="copilot-starter-desc">Extract owners, deadlines, and dependencies into a table.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Floating Centered Composer Card -->
+    <div class="copilot-composer-container">
+      <form id="composer" class="copilot-composer-card composer" autocomplete="off">
+        <!-- Attachment Chips -->
+        <div class="composer-chips-row" id="composer-chips">
+          <div class="chips" id="chips"></div>
+          <div class="chips" id="uploaded-chips"></div>
+        </div>
+
+        <!-- Prompt Textarea -->
+        <textarea id="prompt" class="copilot-textarea" rows="1" maxlength="{{ max_chars }}" placeholder="Ask Upian or @mention a topic... (Ctrl+V supported)" aria-label="Ask Upian"></textarea>
+
+        <!-- Hidden File Input for direct upload -->
+        <input type="file" id="direct-upload" multiple hidden accept="image/*,.png,.jpg,.jpeg,.webp,.bmp,.jfif,.pdf,.docx,.xlsx,.txt,.csv">
+
+        <!-- Bottom Controls Inside Card -->
+        <div class="copilot-composer-bottom">
+          <button type="button" class="copilot-attach-btn plus-btn" id="plus-btn" title="Attach files, datasets, or screenshots" aria-label="Attach">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+            </svg>
+            <span>Attach</span>
+          </button>
+
+          <button id="send" class="copilot-send-btn btn primary" type="submit" aria-label="Send message" title="Send message">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+      </form>
+
+      <!-- Subtitle Footer -->
+      <div class="copilot-composer-footer-text">
+        Upian AI Platform · Creative / Balanced / Precise Intelligence
+      </div>
+    </div>
+  </main>
+
+  <!-- Right Live Activity Drawer (Slideable with Arrow) -->
+  <aside class="live" id="live-panel">
+    <div class="live-head">
+      <div class="live-head-title"><h2>Live Activity</h2></div>
+      <!-- Arrow to close panel to the right -->
+      <button type="button" class="btn-live-close-arrow" id="btn-close-live-arrow" onclick="window.toggleRightActivity()" title="Slide activity panel to the right" aria-label="Close activity">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"></polyline>
+        </svg>
+      </button>
+    </div>
+    <ol id="live-list" class="live-list"></ol>
+    <a class="live-foot" href="{{ url_for('activity') }}">View full activity log</a>
+  </aside>
+</div>
+
+<!-- Upgrade Modal -->
+<div id="upgrade-modal" class="modal-backdrop upgrade-modal-backdrop" hidden>
+  <div class="upgrade-box">
+    <div class="modal-top-bar">
+      <h3 class="modal-title" id="upgrade-modal-title">Upgrade Plan</h3>
+      <button type="button" class="btn-icon-close" id="upgrade-modal-close" title="Close" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="upgrade-content">
+      <p id="upgrade-modal-desc" style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">This capability requires an upgraded subscription tier.</p>
+      <div style="display:flex; gap:10px;">
+        <button type="button" class="btn primary" id="upgrade-confirm-btn" style="flex:1;">Upgrade to Pro</button>
+        <button type="button" class="btn btn-ghost" id="upgrade-cancel-btn">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script id="boot" type="application/json">{{ boot|tojson }}</script>
+
+<script>
+  // Interactive Helper Functions
+  window.sidebarCollapsed = false;
+  window.activityPanelOpen = true;
+
+  // Toggle Left Sidebar with Arrow
+  window.toggleLeftSidebar = function() {
+    var sb = document.getElementById('sidebar');
+    var arrowIcon = document.getElementById('topbar-arrow-icon');
+    if (!sb) return;
+    window.sidebarCollapsed = !window.sidebarCollapsed;
+    sb.classList.toggle('collapsed', window.sidebarCollapsed);
+    if (arrowIcon) {
+      arrowIcon.innerHTML = window.sidebarCollapsed
+        ? '<polyline points="9 18 15 12 9 6"></polyline>'
+        : '<polyline points="15 18 9 12 15 6"></polyline>';
+    }
+  };
+
+  // Toggle Right Live Activity Panel with Arrow
+  window.toggleRightActivity = function() {
+    var panel = document.getElementById('live-panel');
+    var arrowIcon = document.getElementById('activity-arrow-icon');
+    if (!panel) return;
+    window.activityPanelOpen = !window.activityPanelOpen;
+    panel.classList.toggle('collapsed', !window.activityPanelOpen);
+    if (arrowIcon) {
+      arrowIcon.innerHTML = window.activityPanelOpen
+        ? '<polyline points="9 18 15 12 9 6"></polyline>'
+        : '<polyline points="15 18 9 12 15 6"></polyline>';
+    }
+  };
+
+  // Conversation Style Selector
+  window.copilotCurrentStyle = 'balanced';
+  window.setConversationStyle = function(style) {
+    window.copilotCurrentStyle = style;
+    document.querySelectorAll('.copilot-style-pill').forEach(function(pill) {
+      pill.classList.toggle('active', pill.getAttribute('data-style') === style);
+    });
+  };
+
+  // Dark / Light Theme Toggle
+  window.toggleCopilotTheme = function() {
+    var cur = document.documentElement.getAttribute('data-theme') || 'white';
+    var next = (cur === 'black') ? 'white' : 'black';
+    if (window.setAppTheme) {
+      window.setAppTheme(next);
+    } else {
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('upian_theme', next); } catch(e) {}
+    }
+  };
+
+  // Export Chat
+  window.exportCopilotChat = function() {
+    var msgs = document.querySelectorAll('#thread .msg, #thread .message, #thread [data-role]');
+    if (!msgs || msgs.length === 0) {
+      try {
+        var boot = JSON.parse(document.getElementById('boot').textContent);
+        var sessId = localStorage.getItem('upian_active_session_' + boot.uid);
+        var saved = sessId ? JSON.parse(localStorage.getItem('upian_chat_sess_' + sessId) || '[]') : [];
+        if (saved && saved.length) {
+          var mdText = "# Upian Conversation Export\n\n";
+          saved.forEach(function(m) {
+            mdText += "### " + (m.role === 'user' ? 'You' : 'Upian AI') + "\n\n" + m.content + "\n\n---\n\n";
+          });
+          var blob = new Blob([mdText], { type: 'text/markdown;charset=utf-8;' });
+          var u = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = u;
+          a.download = 'upian_conversation_' + Date.now() + '.md';
+          a.click();
+          URL.revokeObjectURL(u);
+          return;
+        }
+      } catch(e) {}
+      alert('No messages in current conversation to export yet.');
+      return;
+    }
+
+    var exportLines = ["# Upian Conversation Export\n\n"];
+    msgs.forEach(function(el) {
+      var role = el.classList.contains('user') ? 'You' : 'Upian AI';
+      var text = el.innerText || el.textContent;
+      exportLines.push("### " + role + "\n\n" + text.trim() + "\n\n---\n\n");
+    });
+    var blob = new Blob([exportLines.join("")], { type: 'text/markdown;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'upian_chat_' + Date.now() + '.md';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+</script>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/chat.js', v='7.1') }}"></script>{% endblock %}

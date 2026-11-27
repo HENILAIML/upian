@@ -2,248 +2,6 @@
 {% block title %}Plans & Pricing · Upian AI{% endblock %}
 {% block body_class %}app page{% endblock %}
 {% block body %}
-<style>
-.plan-tabs-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 20px 0 25px;
-  background: var(--surface);
-  border: 1.5px solid var(--line2);
-  padding: 6px;
-  border-radius: 14px;
-  width: fit-content;
-}
-.plan-tab-toggle {
-  background: transparent;
-  border: none;
-  font: 700 13px var(--display);
-  color: var(--ink2);
-  padding: 9px 18px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all .15s ease;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.plan-tab-toggle.active {
-  background: var(--ink);
-  color: #fff;
-  box-shadow: 2px 2px 0 rgba(0,0,0,.15);
-}
-.custom-builder-wrap {
-  background: var(--surface);
-  border: 2px solid var(--ink);
-  border-radius: 20px;
-  padding: 24px;
-  margin-bottom: 30px;
-  box-shadow: 4px 4px 0 var(--ink);
-}
-.custom-builder-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin-bottom: 20px;
-  border-bottom: 1.5px solid var(--line2);
-  padding-bottom: 16px;
-}
-.custom-builder-head h3 {
-  font: 800 22px var(--display);
-  color: var(--ink);
-  margin: 0 0 6px;
-}
-.custom-builder-head p {
-  color: var(--mute);
-  font-size: 13.5px;
-  margin: 0;
-}
-.custom-price-badge-lg {
-  background: #fff;
-  border: 2px solid var(--ink);
-  border-radius: 14px;
-  padding: 8px 18px;
-  box-shadow: 3px 3px 0 var(--ink);
-  text-align: right;
-}
-.custom-price-badge-lg .lbl {
-  display: block;
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  color: var(--mute);
-  letter-spacing: .05em;
-}
-.custom-price-badge-lg .val {
-  font: 800 26px/1.1 var(--display);
-  color: var(--strong);
-}
-.custom-price-badge-lg .per {
-  font-size: 12px;
-  color: var(--mute);
-}
-.feature-cb-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
-  margin-bottom: 22px;
-}
-.custom-cb-card {
-  position: relative;
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  background: #fff;
-  border: 2px solid var(--line2);
-  border-radius: 14px;
-  padding: 14px 16px;
-  cursor: pointer;
-  transition: all .15s ease;
-  user-select: none;
-}
-.custom-cb-card:hover {
-  border-color: var(--ink);
-  transform: translateY(-2px);
-  box-shadow: 3px 3px 0 var(--ink);
-}
-.custom-cb-card.checked {
-  border-color: var(--strong);
-  background: rgba(238,127,53,.04);
-  box-shadow: 3px 3px 0 var(--ink);
-}
-.custom-cb-card input[type="checkbox"] {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--ink);
-  border-radius: 6px;
-  margin-top: 2px;
-  cursor: pointer;
-  background: #fff;
-  display: grid;
-  place-content: center;
-  flex-shrink: 0;
-  transition: all .15s ease;
-}
-.custom-cb-card input[type="checkbox"]:checked {
-  background: var(--strong);
-  border-color: var(--strong);
-}
-.custom-cb-card input[type="checkbox"]:checked::after {
-  content: "";
-  width: 6px;
-  height: 10px;
-  border: solid #fff;
-  border-width: 0 2.5px 2.5px 0;
-  transform: rotate(45deg);
-  margin-top: -2px;
-}
-.custom-cb-card input[type="checkbox"]:disabled {
-  opacity: .8;
-  cursor: not-allowed;
-}
-.cb-card-body {
-  flex: 1;
-}
-.cb-card-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-.cb-card-title-row strong {
-  font: 700 14px var(--display);
-  color: var(--ink);
-}
-.cb-cost-tag {
-  font: 800 12.5px var(--mono);
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line2);
-  padding: 2px 8px;
-  border-radius: 6px;
-  white-space: nowrap;
-}
-.cb-card-desc {
-  font-size: 12px;
-  color: var(--mute);
-  line-height: 1.4;
-  margin: 0;
-}
-.selected-features-strip {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--line2);
-}
-.strip-label {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--ink);
-}
-.feature-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: #fff;
-  border: 1.5px solid var(--line2);
-  border-radius: 20px;
-  padding: 3px 10px;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--ink2);
-}
-.feature-pill.active {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: #fff;
-}
-.plan-feature-item-cb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  margin-bottom: 6px;
-  font-size: 12.5px;
-  user-select: none;
-}
-.plan-feature-item-cb input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--strong);
-  cursor: pointer;
-}
-.custom-features-scroll li,
-.custom-features-scroll label,
-.custom-features-scroll span,
-.modal-cb-row,
-.modal-cb-row span {
-  color: var(--ink2) !important;
-  font-family: var(--sans) !important;
-  font-size: 12px !important;
-  font-weight: 500 !important;
-  line-height: 1.35 !important;
-}
-.custom-features-scroll span b,
-.custom-features-scroll b,
-.modal-cb-row span b,
-.modal-cb-row b {
-  color: var(--ink) !important;
-  font-weight: 700 !important;
-}
-.custom-features-scroll .modal-cb-row:hover span,
-.modal-cb-row:hover span {
-  color: var(--ink) !important;
-}
-</style>
-
 <div class="shell two">
   <aside class="side" id="sidebar">
     {% set active = 'plans' %}
@@ -253,45 +11,39 @@
   <main class="page-main plans-page-main">
     <header class="page-head">
       <div class="page-head-title">
-        <span class="page-badge">
-          <span class="pulse-dot"></span>
-          <span>Subscription Plans & Pricing</span>
-        </span>
-        <h1>Choose Your Intelligence Tier</h1>
-        <p class="sub">Select a subscription plan configured with dedicated daily throughput, intelligence limits, and AI generation quotas.</p>
+        <h1>Plans & Pricing</h1>
+        <p class="sub">Choose Your Intelligence Tier. Configured for your daily request and reasoning model needs.</p>
       </div>
-      <div class="page-head-actions">
-        <a href="{{ url_for('home') }}" class="btn-head-back-chat" title="Return to Chat Conversation">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-          <span>← Back to Chat</span>
+      <div class="page-head-actions" style="display:flex; align-items:center; gap:12px;">
+        <a href="{{ url_for('home') }}" class="btn-head-back-chat" title="Return to chat">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          <span>Back to Chat</span>
         </a>
-        <div class="current-plan-card-mini">
-          <span class="mini-label">Your Current Plan</span>
-          <div class="mini-badge-wrap">
-            <span class="who-plan-badge {{ me.plan }}" id="page-current-plan-badge">{% if me.subscription_id and me.subscription_id.startswith('custom:') %}{{ me.subscription_id.split('custom:', 1)[1] }}{% else %}{{ PLANS[me.plan].label }}{% endif %}</span>
-          </div>
+        <div class="stat" style="padding: 6px 12px; min-width: 140px;">
+          <div class="lbl">Current Plan</div>
+          <div class="val" style="font-size: 14px; font-weight: 600;" id="page-current-plan-badge">{% if me.subscription_id and me.subscription_id.startswith('custom:') %}{{ me.subscription_id.split('custom:', 1)[1] }}{% else %}{{ PLANS[me.plan].label }}{% endif %}</div>
         </div>
       </div>
     </header>
 
-    <!-- Billing Cycle Toggle Switch (Monthly / Yearly) -->
+    <!-- Billing Switcher -->
     <div class="billing-switcher-container">
       <div class="billing-switcher-wrap" role="group" aria-label="Billing Cycle">
         <button type="button" class="btn-cycle-opt active" id="page-cycle-monthly" onclick="switchPageBillingCycle('monthly')">
-          Monthly Billing
+          Monthly
         </button>
         <button type="button" class="btn-cycle-opt" id="page-cycle-yearly" onclick="switchPageBillingCycle('yearly')">
-          <span>Yearly Billing</span>
-          <span class="cycle-savings-pill">Save ~17% (2 Mo Free)</span>
+          <span>Yearly</span>
+          <span class="cycle-savings-pill">Save 17%</span>
         </button>
       </div>
     </div>
 
-    <!-- Dynamic Plan Cards Grid: Free, Pro, Pro Plus, and any Admin-Created Plans -->
-    <div class="plan-select-grid plans-page-grid" id="page-plan-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px;margin-bottom:24px;">
+    <!-- Dynamic Plan Cards Grid -->
+    <div class="plan-select-grid plans-page-grid" id="page-plan-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 28px;">
       {% for p in plans %}
         {% set is_active_plan = p.current %}
-        <div class="plan-card" id="page-card-{{ p.id }}" data-plan="{{ p.id }}"
+        <div class="plan-card {{ 'active' if is_active_plan else '' }}" id="page-card-{{ p.id }}" data-plan="{{ p.id }}"
           data-label="{{ p.label }}"
           data-monthly-inr="{{ p.price_inr|int }}"
           data-monthly-usd="{{ p.price|int }}"
@@ -300,7 +52,7 @@
           data-price="{{ p.price_inr|int }}"
           onclick="selectPagePlan('{{ p.id }}')">
           <div class="plan-card-head">
-            <span class="plan-tag {{ 'free-tag' if (p.price == 0 or p.is_default) else ('popular' if p.id in ['pro', 'plus'] else 'max') }}">{{ p.tag or ('COMMUNITY' if (p.price == 0 or p.is_default) else ('RECOMMENDED' if p.id in ['pro', 'plus'] else 'PREMIUM')) }}</span>
+            <span class="plan-tag {{ 'popular' if p.id in ['pro', 'plus'] else '' }}">{{ p.tag or ('Starter' if (p.price == 0 or p.is_default) else ('Popular' if p.id in ['pro', 'plus'] else 'Enterprise')) }}</span>
             <div class="plan-card-title">
               <h3>{{ p.label }}</h3>
             </div>
@@ -308,32 +60,54 @@
               <span class="currency">₹</span>
               <span class="amount" id="page-{{ p.id }}-amount">{{ p.price_inr|int }}</span>
               <span class="period" id="page-{{ p.id }}-period">{{ '/forever' if (p.price == 0 or p.is_default) else '/month' }}</span>
-              <span class="usd-alt" id="page-{{ p.id }}-usd">(${{ p.price|int }})</span>
+              <span class="usd-alt" id="page-{{ p.id }}-usd">(${{ p.price|int }} USD)</span>
             </div>
           </div>
-          <p class="plan-card-desc">{{ p.description or 'High-speed AI gateway and premium quota access.' }}</p>
+          <p class="plan-card-desc">{{ p.description or 'High-speed model routing and higher request quotas.' }}</p>
           <ul class="plan-features-list">
             {% if p.features and p.features|length > 0 %}
               {% for feat in p.features %}
-                <li><span>✓</span> {{ feat }}</li>
+                <li>
+                  <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>{{ feat }}</span>
+                </li>
               {% endfor %}
             {% else %}
-              <li><span>✓</span> <b>{{ p.daily }} requests</b> / day ({{ p.monthly }} / month)</li>
+              <li>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span><b>{{ p.daily }} requests</b> per day</span>
+              </li>
+              <li>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span><b>{{ p.monthly }} requests</b> per month</span>
+              </li>
               {% if p.image_gen %}
-                <li><span>✓</span> <b>{{ p.image_daily }} AI Images</b> per day</li>
+              <li>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span><b>{{ p.image_daily }} AI images</b> per day</span>
+              </li>
               {% else %}
-                <li class="dim"><span>✕</span> No AI image generation</li>
+              <li class="disabled-feat">
+                <svg class="cross-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <span>No AI image generation</span>
+              </li>
               {% endif %}
-              <li><span>✓</span> Dual-tier reasoning & fast routing</li>
-              <li><span>✓</span> Document exports & multimodal tools</li>
+              <li>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Dual-tier reasoning & smart routing</span>
+              </li>
+              <li>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Document exports & vault access</span>
+              </li>
             {% endif %}
           </ul>
-          <div class="plan-card-foot" style="margin-top:auto;padding-top:12px;">
+          <div class="plan-card-foot" style="margin-top:auto; padding-top:12px;">
             {% if is_active_plan %}
-              <button type="button" class="btn block sm plan-select-btn current-active" disabled>Current Plan</button>
+              <button type="button" class="btn block sm" disabled>Current plan</button>
             {% else %}
-              <button type="button" class="btn block sm {{ 'primary' if (p.price > 0 and not p.is_default) else '' }} plan-select-btn" onclick="selectPagePlan('{{ p.id }}'); event.stopPropagation();">
-                <span id="page-{{ p.id }}-btn-text">{{ ('Choose ' ~ p.label) if (p.price == 0 or p.is_default) else 'Select ' ~ p.label ~ ' (₹' ~ (p.price_inr|int) ~ ')' }}</span>
+              <button type="button" class="btn block sm {{ 'primary' if (p.price > 0 and not p.is_default) else '' }}" onclick="selectPagePlan('{{ p.id }}'); event.stopPropagation();">
+                <span id="page-{{ p.id }}-btn-text">{{ ('Select ' ~ p.label) if (p.price == 0 or p.is_default) else 'Upgrade to ' ~ p.label ~ ' (₹' ~ (p.price_inr|int) ~ ')' }}</span>
               </button>
             {% endif %}
           </div>
@@ -341,78 +115,58 @@
       {% endfor %}
     </div>
 
-    <!-- Payment section (visible when an upgrade or change is chosen) -->
+    <!-- Checkout / Payment Section -->
     <div class="page-pay-container" id="page-pay-container">
-      <div class="pay-section">
-        <div class="pay-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; border-bottom: 1px solid var(--line2); padding-bottom: 14px;">
+      <div class="pay-section" style="max-width: 680px; margin: 0 auto;">
+        <div class="pay-section-header">
           <div>
-            <h3 id="checkout-title" style="font: 800 20px var(--display); color: var(--ink); margin: 0 0 4px;">Complete Checkout for Pro Plan</h3>
-            <p class="dim small" id="checkout-subtitle" style="margin: 0;">Instant activation via UPI, Card, or Net Banking.</p>
+            <h3 id="checkout-title" style="font-size: 16px; font-weight: 600; color: var(--text);">Complete Checkout</h3>
+            <p class="dim small" id="checkout-subtitle" style="margin-top: 2px;">Instant account upgrade via Razorpay or UPI.</p>
           </div>
-          <div class="checkout-amount-badge" style="background: var(--surface); border: 2px solid var(--ink); border-radius: 12px; padding: 6px 14px; box-shadow: 2px 2px 0 var(--ink);">
-            <span class="curr" style="font-weight: 700; font-size: 14px;">₹</span><span id="checkout-price-display" style="font: 800 22px var(--display);">999</span><span class="per" style="font-size: 12px; color: var(--mute);">/mo</span>
+          <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 12px; font-size: 15px; font-weight: 700;">
+            <span>₹</span><span id="checkout-price-display">0</span><span class="dim small" style="margin-left: 2px;">/mo</span>
           </div>
         </div>
 
         <div id="checkout-form-area">
-          <div class="pay-section" style="padding: 0; border: none; margin-bottom: 0;">
-            <div style="background:#faf9f6; border:1.5px solid var(--line2); border-radius:14px; padding:18px 20px;">
-              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <span style="font-size:20px;">💳</span>
-                  <span style="font:800 16px var(--display); color:var(--ink);">Official Razorpay Payment Gateway</span>
-                </div>
-                <span style="display:inline-flex; align-items:center; gap:5px; background:var(--weak-bg, #dcf3e8); color:var(--weak, #0c8a5a); font-size:11.5px; font-weight:700; padding:3px 10px; border-radius:99px; border:1px solid rgba(12,138,90,0.25);">
-                  <span style="width:6px; height:6px; border-radius:50%; background:#17b26a; display:inline-block;"></span>
-                  Verified & Active
-                </span>
-              </div>
-              <p style="font-size:13px; font-weight:600; color:var(--ink); margin:0 0 4px;">Direct instant payment via all Indian & Global payment modes:</p>
-              <p style="font-size:12.5px; color:var(--mute); margin:0 0 12px;">Instant activation via Razorpay (All UPI apps, Cards, Net Banking, and Wallets supported).</p>
-              <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                <span style="display:inline-flex; align-items:center; gap:4px; background:#ffffff; border:1px solid var(--line2); border-radius:6px; padding:4px 10px; font-size:12px; font-weight:700; color:var(--ink2);">
-                  <span style="color:#0c8a5a;">⚡</span> UPI (GPay, PhonePe, Paytm)
-                </span>
-                <span style="display:inline-flex; align-items:center; gap:4px; background:#ffffff; border:1px solid var(--line2); border-radius:6px; padding:4px 10px; font-size:12px; font-weight:700; color:var(--ink2);">
-                  <span style="color:#e8813d;">💳</span> Credit / Debit Cards
-                </span>
-                <span style="display:inline-flex; align-items:center; gap:4px; background:#ffffff; border:1px solid var(--line2); border-radius:6px; padding:4px 10px; font-size:12px; font-weight:700; color:var(--ink2);">
-                  <span>🏦</span> 50+ Net Banking Banks
-                </span>
-              </div>
-              <div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--line2); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-                <span style="font-size:12px; color:var(--mute); display:inline-flex; align-items:center; gap:5px;">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                  256-Bit SSL Bank Encryption
-                </span>
-                <span style="font-size:12px; font-weight:700; color:#0c8a5a; display:inline-flex; align-items:center; gap:4px;">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  Instant Provisioning · Cancel Anytime
-                </span>
-              </div>
+          <div class="pay-details-box">
+            <p class="pay-details-head">Supported Payment Methods</p>
+            <p class="pay-details-sub">Pay securely using UPI (Google Pay, PhonePe, Paytm), credit/debit cards, or net banking.</p>
+            <div class="pay-methods-list" style="margin-bottom: 12px;">
+              <span class="pay-pill">UPI Apps</span>
+              <span class="pay-pill">Visa / Mastercard / RuPay</span>
+              <span class="pay-pill">Net Banking</span>
+            </div>
+            <div class="pay-trust-footer">
+              <span class="trust-item">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <span>256-bit SSL encrypted</span>
+              </span>
+              <span class="trust-item">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Instant activation</span>
+              </span>
             </div>
           </div>
 
-          <div class="plan-modal-foot" style="margin-top: 20px;">
-            <button type="button" class="btn-upgrade-action" id="btn-page-submit-pay" onclick="submitPagePayment()">
-              <span id="page-pay-btn-text">Pay with Razorpay & Upgrade</span>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          <div style="margin-top: 16px;">
+            <button type="button" class="btn primary block" id="btn-page-submit-pay" onclick="submitPagePayment()">
+              <span id="page-pay-btn-text">Pay & Upgrade</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
             </button>
-            <div class="pay-secure-note" style="margin-top: 8px;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              <span>256-bit Encrypted Checkout · Instant plan provisioning · Cancel anytime</span>
-            </div>
           </div>
         </div>
 
-        <!-- Success notification view -->
+        <!-- Success Notification View -->
         <div class="plan-modal-success" id="page-pay-success" style="display:none; text-align: center; padding: 24px 10px;">
-          <div class="success-icon-wrap" style="width: 68px; height: 68px; border-radius: 50%; background: var(--weak-bg); color: var(--weak); font-size: 34px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; border: 2px solid var(--weak); box-shadow: 0 6px 16px rgba(12,138,90,.25);">✓</div>
-          <h3 id="page-success-title" style="font: 800 26px var(--display); color: var(--ink); margin: 0 0 8px;">Upgrade Successful!</h3>
-          <p id="page-success-desc" style="font-size: 15px; color: var(--ink2); margin: 0 0 16px;">You are now upgraded to the Pro plan. Your limits and capabilities have been updated immediately.</p>
-          <div class="tx-badge" id="page-tx-ref" style="display: inline-block; background: var(--surface); border: 1.5px dashed var(--line2); padding: 8px 16px; border-radius: 8px; font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 20px;">TX-ID: UPIAN-PAY-8F29A</div>
+          <div class="success-icon-wrap" style="width: 48px; height: 48px; border-radius: 50%; background: var(--success-bg); color: var(--success); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; border: 1px solid var(--success-border);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <h3 id="page-success-title" style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">Upgrade Complete</h3>
+          <p id="page-success-desc" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">Your subscription has been updated and new quotas are active.</p>
+          <div class="tx-badge" id="page-tx-ref" style="display: inline-block; background: var(--surface); border: 1px solid var(--border); padding: 4px 10px; border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12px; margin-bottom: 16px;">TX-ID: UPIAN-PAY</div>
           <div>
-            <a href="{{ url_for('home') }}" class="btn primary" style="font-size: 15px; padding: 10px 22px;">💬 Return to Chat</a>
+            <a href="{{ url_for('home') }}" class="btn primary">Return to Chat</a>
           </div>
         </div>
       </div>
@@ -421,12 +175,10 @@
 </div>
 
 <script id="boot" type="application/json">{{ boot|tojson }}</script>
-
 <script>
 (function () {
   var currentPlan = "{{ current_plan }}";
   var selectedPlan = null;
-  var selectedMethod = 'upi';
   var pageBillingCycle = 'monthly';
   var activeAmount = 0;
 
@@ -449,53 +201,44 @@
       var amountEl = card.querySelector('.plan-card-price .amount');
       var periodEl = card.querySelector('.plan-card-price .period');
       var usdEl = card.querySelector('.plan-card-price .usd-alt');
-      var btnSpan = card.querySelector('.plan-select-btn span') || card.querySelector('.plan-select-btn');
+      var btnTextEl = card.querySelector('#page-' + planId + '-btn-text');
 
-      if (amountEl) amountEl.textContent = inrPrice.toLocaleString();
+      if (amountEl) amountEl.textContent = inrPrice;
       if (periodEl) periodEl.textContent = isYearly ? '/year' : '/month';
-      if (usdEl) usdEl.textContent = '($' + usdPrice.toLocaleString() + (isYearly ? '/yr)' : ')');
-      if (btnSpan && !card.querySelector('.current-active')) {
-        btnSpan.textContent = 'Select ' + label + ' (₹' + inrPrice.toLocaleString() + (isYearly ? '/yr' : '') + ')';
+      if (usdEl) usdEl.textContent = '($' + usdPrice + ' USD' + (isYearly ? '/yr)' : ')');
+      if (btnTextEl && !card.querySelector('.current-active')) {
+        btnTextEl.textContent = 'Upgrade to ' + label + ' (₹' + inrPrice + ')';
       }
     });
 
-    if (typeof selectPagePlan === 'function') selectPagePlan(selectedPlan);
+    if (selectedPlan) {
+      selectPagePlan(selectedPlan);
+    }
   };
 
   window.selectPagePlan = function (plan) {
     if (!plan) {
-      selectedPlan = null;
-      var cards = document.querySelectorAll('.plans-page-grid .plan-card');
-      cards.forEach(function (c) { c.classList.remove('selected'); });
-      var titleEl = document.getElementById('checkout-title');
-      var priceEl = document.getElementById('checkout-price-display');
-      var btnTextEl = document.getElementById('page-pay-btn-text');
-      if (titleEl) titleEl.textContent = 'Select a Plan Above to Continue';
-      if (priceEl) priceEl.textContent = '0';
-      if (btnTextEl) btnTextEl.textContent = 'Select a plan above to continue';
-      return;
-    }
-    if (selectedPlan === plan) {
-      // Toggle off if clicked again
-      window.selectPagePlan(null);
-      return;
+      var firstNonCurrent = document.querySelector('.plans-page-grid .plan-card:not(.active)');
+      if (firstNonCurrent) plan = firstNonCurrent.getAttribute('data-plan');
+      else plan = 'pro';
     }
     selectedPlan = plan;
+
     var cards = document.querySelectorAll('.plans-page-grid .plan-card');
     cards.forEach(function (c) {
       if (c.getAttribute('data-plan') === plan) {
-        c.classList.add('selected');
+        c.classList.add('active');
       } else {
-        c.classList.remove('selected');
+        c.classList.remove('active');
       }
     });
 
+    var isYearly = (pageBillingCycle === 'yearly');
+    var cycleLabel = isYearly ? ' (Yearly)' : ' (Monthly)';
     var titleEl = document.getElementById('checkout-title');
     var priceEl = document.getElementById('checkout-price-display');
     var btnTextEl = document.getElementById('page-pay-btn-text');
     var payContainer = document.getElementById('page-pay-container');
-    var isYearly = (pageBillingCycle === 'yearly');
-    var cycleLabel = isYearly ? ' (Yearly - 365 Days)' : ' (Monthly)';
 
     var card = document.querySelector('.plans-page-grid .plan-card[data-plan="' + plan + '"]');
     var planLabel = (card && card.getAttribute('data-label')) || plan;
@@ -511,51 +254,9 @@
       if (titleEl) titleEl.textContent = 'Switch to ' + planLabel;
       if (btnTextEl) btnTextEl.textContent = 'Switch to ' + planLabel;
     } else {
-      if (titleEl) titleEl.textContent = 'Complete Checkout for ' + planLabel + ' Plan' + cycleLabel;
-      if (btnTextEl) btnTextEl.textContent = 'Pay ₹' + activeAmount.toLocaleString() + ' with Razorpay & Upgrade to ' + planLabel + cycleLabel;
+      if (titleEl) titleEl.textContent = 'Complete Checkout for ' + planLabel + cycleLabel;
+      if (btnTextEl) btnTextEl.textContent = 'Pay ₹' + activeAmount.toLocaleString() + ' with Razorpay & Upgrade' + cycleLabel;
     }
-
-    if (payContainer) {
-      payContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  };
-
-    if (payContainer) {
-      payContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  };
-
-  window.setCheckoutMethod = function (m) {
-    selectedMethod = m;
-    var tabs = document.querySelectorAll('.pay-tab-btn');
-    tabs.forEach(function (t) {
-      if (t.getAttribute('data-tab') === m) {
-        t.classList.add('active');
-      } else {
-        t.classList.remove('active');
-      }
-    });
-
-    var upiTab = document.getElementById('page-tab-upi');
-    var cardTab = document.getElementById('page-tab-card');
-    var netTab = document.getElementById('page-tab-netbanking');
-
-    if (upiTab) upiTab.style.display = (m === 'upi') ? 'block' : 'none';
-    if (cardTab) cardTab.style.display = (m === 'card') ? 'block' : 'none';
-    if (netTab) netTab.style.display = (m === 'netbanking') ? 'block' : 'none';
-  };
-
-  window.copyPageUPI = function () {
-    var upiVal = document.getElementById('page-upi-id-val');
-    var copyBtn = document.getElementById('btn-page-copy-upi');
-    if (!upiVal || !copyBtn) return;
-    var text = upiVal.textContent.trim();
-    navigator.clipboard.writeText(text).then(function () {
-      copyBtn.textContent = '✓ Copied!';
-      setTimeout(function () { copyBtn.textContent = '📋 Copy UPI ID'; }, 2000);
-    }).catch(function () {
-      copyBtn.textContent = '✓ upian@upi';
-    });
   };
 
   window.submitPagePayment = async function () {
@@ -568,7 +269,7 @@
     var originalText = btnText ? btnText.textContent : 'Pay';
 
     if (btn) btn.disabled = true;
-    if (btnText) btnText.textContent = 'Processing Payment...';
+    if (btnText) btnText.textContent = 'Processing...';
 
     var csrfMeta = document.querySelector('meta[name="csrf-token"]');
     var csrf = csrfMeta ? csrfMeta.getAttribute('content') : '';
@@ -594,7 +295,6 @@
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment failed');
 
-      // Show success view
       var formArea = document.getElementById('checkout-form-area');
       var successView = document.getElementById('page-pay-success');
       var successTitle = document.getElementById('page-success-title');
@@ -607,24 +307,14 @@
 
       var card = document.querySelector('.plans-page-grid .plan-card[data-plan="' + selectedPlan + '"]');
       var newLabel = data.plan_label || (card && card.getAttribute('data-label')) || selectedPlan;
-      if (successTitle) successTitle.textContent = 'Successfully Activated ' + newLabel + '!';
+      if (successTitle) successTitle.textContent = 'Upgraded to ' + newLabel;
       if (successDesc) {
-        successDesc.textContent = data.message || ('You are now subscribed to the ' + newLabel + ' plan.');
+        successDesc.textContent = data.message || ('You are now subscribed to ' + newLabel + '.');
       }
       if (txRefEl) txRefEl.textContent = 'TX-ID: ' + (data.transaction_id || 'UPIAN-PAY');
 
       if (badgeEl) {
         badgeEl.textContent = newLabel;
-        badgeEl.className = 'who-plan-badge ' + (data.plan || selectedPlan);
-      }
-
-      var sideBadge = document.getElementById('btn-buy-plan');
-      if (sideBadge) {
-        var labelSpan = sideBadge.querySelector('#who-plan-label');
-        if (labelSpan) labelSpan.textContent = newLabel;
-        sideBadge.className = 'who-plan-badge ' + (data.plan || 'plus');
-        var cue = sideBadge.querySelector('.badge-upgrade-cue');
-        if (cue) cue.style.display = (data.price === 0 || data.is_default || data.plan === (boot && boot.default_plan ? boot.default_plan : 'free')) ? 'inline-block' : 'none';
       }
     }
 
@@ -634,8 +324,7 @@
           var ordPayload = {
             plan: payload.plan,
             billing_cycle: pageBillingCycle || 'monthly',
-            amount: payload.amount,
-            custom_plan_name: payload.custom_plan_name || null
+            amount: payload.amount
           };
           var ordRes = await fetch('/api/payment/razorpay/order', {
             method: 'POST',
@@ -664,7 +353,7 @@
                   alert(e.message || 'Activation failed');
                 }
               },
-              theme: { color: '#ee7f35' }
+              theme: { color: '#C2561A' }
             });
             rzp.on('payment.failed', function (resp) {
               alert('Payment failed: ' + (resp.error.description || 'Unknown error'));
@@ -683,12 +372,12 @@
 
     } catch (err) {
       alert('Payment Error: ' + err.message);
+    } finally {
       if (btn) btn.disabled = false;
       if (btnText) btnText.textContent = originalText;
     }
   };
 
-  // Initialize
   selectPagePlan(null);
 })();
 </script>

@@ -1,146 +1,429 @@
 {% extends "base.html" %}
-{% block title %}UPIAN AI Gateway{% endblock %}
+{% block title %}Chat · Upian AI{% endblock %}
 {% block body_class %}app{% endblock %}
 {% block body %}
-<div id="drop-overlay" class="drop-overlay">Drop files or images here to analyze</div>
+<div id="drop-overlay" class="drop-overlay">Drop files or images to attach</div>
 <div class="shell" id="app-shell">
+  
+  <!-- Sidebar -->
   <aside class="side" id="sidebar">
     {% set active = 'chat' %}
     {% include "_side.html" %}
   </aside>
 
-  <main class="chat" id="chat-dropzone">
+  <!-- Developer File Tree (Visible in UI 4: Developer Hub) -->
+  <div class="dev-file-tree" id="dev-tree-sidebar" style="display:none;">
+    <div class="dev-tree-header">
+      <span>Project Workspace</span>
+      <button type="button" class="link small" title="Refresh files" style="font-size:11px;">Refresh</button>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:2px;">
+      <a class="dev-file-item active" onclick="window.selectDevTab('app.py')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+        <span>app.py</span>
+      </a>
+      <a class="dev-file-item" onclick="window.selectDevTab('models.py')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+        <span>models.py</span>
+      </a>
+      <a class="dev-file-item" onclick="window.selectDevTab('schema.sql')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+        <span>schema.sql</span>
+      </a>
+      <a class="dev-file-item" onclick="window.selectDevTab('output.json')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+        <span>output.json</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Main Chat / Canvas Column -->
+  <main class="chat artifacts-left-chat" id="chat-dropzone">
+    <!-- Topbar with 5 UI Selector -->
     <header class="chat-topbar" id="chat-topbar">
       <div class="topbar-left">
-        <button type="button" class="panel-toggle-btn" id="sidebar-toggle" title="Toggle Sidebar (Expand/Collapse)" aria-label="Toggle Sidebar">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="15 18 9 12 15 6"></polyline>
+        <button type="button" class="panel-toggle-btn" id="sidebar-toggle" title="Toggle sidebar" aria-label="Toggle sidebar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
           </svg>
         </button>
-        <button type="button" class="new-chat-pill" id="new-chat-btn" title="Start a fresh chat conversation">
+        <button type="button" class="new-chat-pill" id="new-chat-btn" title="Start new conversation" aria-label="Start new conversation">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           <span>New chat</span>
         </button>
       </div>
 
-      <div class="topbar-center" id="topbar-center">
-        <!-- Plan Widget (on the left side of Context Window) -->
+      <!-- 5 UIs Live Selector Bar -->
+      <div class="topbar-center" id="topbar-center" style="gap:10px;">
+        <div class="ui-switcher-pill" role="toolbar" aria-label="Select AI UI style">
+          <span class="ui-switcher-label">UI Style:</span>
+          <button type="button" class="ui-opt-btn active" data-ui-set="1" title="UI 1: Upian Model Routing (Linear/Raycast style)">1. Routing</button>
+          <button type="button" class="ui-opt-btn" data-ui-set="2" title="UI 2: Deep Research (Perplexity style)">2. Research</button>
+          <button type="button" class="ui-opt-btn" data-ui-set="3" title="UI 3: Dual-Pane Artifacts (Claude style)">3. Artifacts</button>
+          <button type="button" class="ui-opt-btn" data-ui-set="4" title="UI 4: Developer Hub (Cursor style)">4. Developer</button>
+          <button type="button" class="ui-opt-btn" data-ui-set="5" title="UI 5: Living Document (Notion style)">5. Document</button>
+        </div>
+
+        <!-- Plan Widget -->
         <div class="topbar-plan-widget" id="topbar-plan-widget">
-          <button type="button" class="topbar-plan-btn" id="topbar-plan-btn" title="View plan and daily usage" aria-label="View plan and daily usage">
-            <span class="plan-pill-icon">⚡</span>
+          <button type="button" class="topbar-plan-btn" id="topbar-plan-btn" title="View plan quota and limits" aria-label="View plan and daily usage">
             <span class="plan-pill-name" id="top-plan-name">{{ PLANS[me.plan].label }}</span>
             <span class="plan-pill-count" id="top-plan-count">--</span>
-            <svg class="plan-pill-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            <svg class="plan-pill-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </button>
           <div class="topbar-plan-dropdown" id="topbar-plan-dropdown" hidden>
-            <section class="usage" id="usage-box" onclick="if(window.openPlanModal){window.openPlanModal();}else{location.href='{{ url_for('plans_page') }}';}" style="cursor: pointer;" title="Click to view all plans (Free, Pro, Pro Plus)">
+            <section class="usage" id="usage-box" onclick="if(window.openPlanModal){window.openPlanModal();}else{location.href='{{ url_for('plans_page') }}';}" style="cursor: pointer;" title="View all plans">
               <div class="usage-head"><span>Plan</span><b id="plan-name">{{ PLANS[me.plan].label }}</b></div>
               <div id="meters"></div>
               <p class="hint" id="reset-note"></p>
+              <div class="usage-upgrade-action">
+                <span>View & Upgrade Plans →</span>
+              </div>
             </section>
           </div>
         </div>
 
-        <!-- Mount point for Context Window -->
+        <!-- Mount point for Context Window Pill -->
         <div id="ctx-mount"></div>
       </div>
 
       <div class="topbar-right">
-        <button type="button" class="panel-toggle-btn live-btn" id="live-toggle" title="Toggle Live Activity Panel" aria-label="Toggle Live Activity">
-          <span class="live-dot-pulse"></span>
-          <span>Live Activity</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="9 18 15 12 9 6"></polyline>
+        <button type="button" class="panel-toggle-btn live-btn" id="live-toggle" title="Toggle Live Activity panel" aria-label="Toggle Live Activity">
+          <span>Activity</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
           </svg>
         </button>
       </div>
     </header>
 
-    <div id="scroller" class="scroller">
-      <div class="col" id="thread">
-        <div class="empty" id="empty">
-          <h1>What are you working on?</h1>
-          <p>Intelligent multimodal gateway. Text is dynamically routed to simple, medium, or complex reasoning tiers. Upload images for classification or VQA, or request image generation.</p>
-          <div class="starters">
-            <button type="button" class="starter" data-p="Explain what DNS does in two sentences.">Explain what DNS does in two sentences.</button>
-            <button type="button" class="starter" data-p="Design a rate limiter for a multi-region API and explain the trade-offs between token bucket and sliding window.">Design a rate limiter for a multi-region API and explain the trade-offs.</button>
-            <button type="button" class="starter" data-p="Generate an image of a futuristic solar-powered rover exploring the crimson dunes of Mars.">Generate an image of a futuristic solar-powered rover on Mars.</button>
-            <button type="button" class="starter" data-p="What are the key differences between SQL and NoSQL databases with examples?">Compare SQL and NoSQL databases.</button>
-          </div>
-        </div>
+    <!-- UI 2 Specialized Header: Deep Research Studio Controls -->
+    <div class="research-header-banner" id="research-banner" style="display:none;">
+      <div class="research-modes-group">
+        <button type="button" class="research-mode-btn active" onclick="window.setResearchMode('deep')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <span>Deep Research</span>
+        </button>
+        <button type="button" class="research-mode-btn" onclick="window.setResearchMode('web')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+          <span>Web Synthesis</span>
+        </button>
+        <button type="button" class="research-mode-btn" onclick="window.setResearchMode('academic')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          <span>Academic & Reasoning</span>
+        </button>
+      </div>
+      <div style="font-size:12px; color:var(--text-muted);">Citations & Grounding Active</div>
+    </div>
+
+    <!-- UI 4 Specialized Header: Developer Tabs Bar -->
+    <div class="dev-editor-tabs" id="dev-tabs-bar" style="display:none;">
+      <button type="button" class="dev-tab active" id="tab-app-py" onclick="window.selectDevTab('app.py')">app.py</button>
+      <button type="button" class="dev-tab" id="tab-models-py" onclick="window.selectDevTab('models.py')">models.py</button>
+      <button type="button" class="dev-tab" id="tab-schema-sql" onclick="window.selectDevTab('schema.sql')">schema.sql</button>
+      <button type="button" class="dev-tab" id="tab-output-json" onclick="window.selectDevTab('output.json')">output.json</button>
+      <div class="dev-model-switch">
+        <span class="dim">Engine:</span>
+        <span class="tag strong">Reasoning-Pro</span>
       </div>
     </div>
+
+    <!-- Chat Message Scroller -->
+    <div id="scroller" class="scroller">
+      <div class="col" id="thread">
+        
+        <!-- UI 5 Specialized Header: Living Document Banner -->
+        <div class="notion-doc-canvas" id="notion-canvas" style="display:none;">
+          <input type="text" class="notion-doc-title" id="notion-title" value="Engineering System Architecture & Spec" placeholder="Untitled Document">
+          <div class="notion-doc-meta">
+            <span>Last edited by {{ me.name }}</span>
+            <span>·</span>
+            <span>AI Copilot Ready</span>
+          </div>
+          <div class="notion-templates-bar">
+            <span style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-right:4px;">Templates:</span>
+            <button type="button" class="notion-template-pill" onclick="window.applyDocTemplate('prd')">Product Requirements</button>
+            <button type="button" class="notion-template-pill" onclick="window.applyDocTemplate('arch')">System Architecture</button>
+            <button type="button" class="notion-template-pill" onclick="window.applyDocTemplate('meeting')">Executive Summary</button>
+          </div>
+        </div>
+
+        <!-- Default Empty State -->
+        <div class="empty" id="empty">
+          <h1 id="empty-title">How can I help you today?</h1>
+          <p id="empty-subtitle">Direct access to fast and deep reasoning models with transparent routing. Attach documents, datasets, or images for analysis.</p>
+          <div class="starters" id="empty-starters">
+            <button type="button" class="starter" data-p="Explain what DNS does in two sentences.">Explain what DNS does in two sentences.</button>
+            <button type="button" class="starter" data-p="Design a rate limiter for a multi-region API and compare token bucket vs sliding window.">Design a rate limiter for a multi-region API.</button>
+            <button type="button" class="starter" data-p="Generate an image of a futuristic solar-powered rover exploring Mars.">Generate an image of a solar-powered Mars rover.</button>
+            <button type="button" class="starter" data-p="Compare SQL and NoSQL database trade-offs with production examples.">Compare SQL and NoSQL database trade-offs.</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Composer Form -->
     <form id="composer" class="composer" autocomplete="off">
       <div class="composer-chips-row" id="composer-chips">
         <div class="chips" id="chips"></div>
         <div class="chips" id="uploaded-chips"></div>
       </div>
-      <div class="col composer-row">
-        <button type="button" class="plus-btn" id="plus-btn" title="Add files or attach from My files" aria-label="Add files">+</button>
-        <textarea id="prompt" rows="1" maxlength="{{ max_chars }}" placeholder="Message UPIAN, ask a question, or describe an image to generate..." aria-label="Message"></textarea>
-        <button id="send" class="btn primary" type="submit">Send</button>
+
+      <!-- UI 1 Quick Mode Chips -->
+      <div class="command-mode-chips" id="cmd-chips-bar" style="display:none;">
+        <span class="cmd-chip active" onclick="window.setPromptPrefix('')">General</span>
+        <span class="cmd-chip" onclick="window.setPromptPrefix('Deep Reasoning: ')">Reasoning</span>
+        <span class="cmd-chip" onclick="window.setPromptPrefix('Write clean production code: ')">Code</span>
+        <span class="cmd-chip" onclick="window.setPromptPrefix('Summarize key findings: ')">Summary</span>
+      </div>
+
+      <div class="col composer-row composer-row-outside">
+        <button type="button" class="plus-btn composer-btn-outside" id="plus-btn" title="Attach files or screenshots" aria-label="Attach files">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+        <div class="composer-input-bar">
+          <textarea id="prompt" rows="1" maxlength="{{ max_chars }}" placeholder="Message Upian AI..." aria-label="Message"></textarea>
+        </div>
+        <button id="send" class="btn primary composer-send-outside" type="submit" aria-label="Send message">Send</button>
       </div>
       <input type="file" id="direct-upload" multiple hidden accept="image/*,.png,.jpg,.jpeg,.webp,.bmp,.jfif,.pdf,.docx,.xlsx,.txt,.csv">
       <div class="col composer-hint">
-        <span><a href="{{ url_for('files_page') }}" class="link">My Files</a> · <a href="/vision" class="link">Vision Studio</a> · Drag & drop files anywhere</span>
-        <button type="button" class="link" id="new-chat">Start a new chat</button>
+        <span><a href="{{ url_for('files_page') }}" class="link">My Files</a> · Drag & drop files or paste screenshots with Ctrl+V</span>
+        <button type="button" class="link" id="new-chat">New chat</button>
       </div>
     </form>
   </main>
 
-  <aside class="live">
+  <!-- UI 3 Specialized Right Pane: Artifacts & Document Canvas -->
+  <aside class="artifacts-right-canvas" id="artifacts-panel" style="display:none;">
+    <div class="artifact-canvas-head">
+      <div class="artifact-tabs">
+        <button type="button" class="artifact-tab-btn active" id="tab-art-preview" onclick="window.switchArtifactTab('preview')">Preview</button>
+        <button type="button" class="artifact-tab-btn" id="tab-art-code" onclick="window.switchArtifactTab('code')">Code</button>
+        <button type="button" class="artifact-tab-btn" id="tab-art-doc" onclick="window.switchArtifactTab('doc')">Document</button>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <button type="button" class="action-icon-btn" onclick="window.copyArtifactContent()" title="Copy artifact">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span>Copy</span>
+        </button>
+      </div>
+    </div>
+    <div class="artifact-canvas-body" id="artifact-content-body">
+      <div style="color:var(--text-secondary); text-align:center; padding-top:40px;">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="color:var(--text-muted); margin-bottom:12px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+        <p style="font-weight:600; color:var(--text); margin-bottom:4px;">Live Artifact Canvas</p>
+        <p style="font-size:12.5px;">Code blocks, markdown documents, and tabular outputs will display here automatically side-by-side with your chat.</p>
+      </div>
+    </div>
+    <div class="artifact-canvas-footer">
+      <span>Auto-synchronized with conversation stream</span>
+      <span class="mono">Upian v6.0</span>
+    </div>
+  </aside>
+
+  <!-- Live Activity Drawer -->
+  <aside class="live" id="live-panel">
     <div class="live-head">
-      <div class="live-head-title"><span class="pulse"></span><h2>Live activity</h2></div>
+      <div class="live-head-title"><h2>Live Activity</h2></div>
     </div>
     <ol id="live-list" class="live-list"></ol>
-    <a class="live-foot" href="{{ url_for('activity') }}">Open full history</a>
+    <a class="live-foot" href="{{ url_for('activity') }}">View full activity log</a>
   </aside>
 </div>
 
-<!-- UPGRADE REQUIRED MODAL (MID POP-UP) -->
+<!-- Upgrade Modal -->
 <div id="upgrade-modal" class="modal-backdrop upgrade-modal-backdrop" hidden>
   <div class="upgrade-box">
-    <button type="button" class="upgrade-close-btn" id="upgrade-modal-close" title="Close" aria-label="Close">&times;</button>
-    <div class="upgrade-icon-wrap">
-      <div class="upgrade-icon-badge">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-          <circle cx="8.5" cy="8.5" r="1.5"></circle>
-          <polyline points="21 15 16 10 5 21"></polyline>
-        </svg>
+    <div class="modal-top-bar">
+      <div class="modal-title-group">
+        <h3 class="modal-title" id="upgrade-modal-title">Upgrade Subscription</h3>
+        <p class="modal-desc" id="upgrade-modal-desc">This capability requires an upgraded subscription tier.</p>
       </div>
-      <span class="upgrade-plan-pill" id="upgrade-plan-badge">Current: Free Plan</span>
+      <button type="button" class="btn-icon-close" id="upgrade-modal-close" title="Close" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
     </div>
     
     <div class="upgrade-content">
-      <h3 id="upgrade-modal-title">AI Image Generation is a Pro Feature</h3>
-      <p id="upgrade-modal-desc">You are currently on the <b>Free plan</b>. Creating and generating AI images requires a <b>Pro</b> or <b>Pro Plus</b> subscription.</p>
-      
-      <div class="upgrade-perks">
-        <div class="perk-item">
-          <span class="perk-check">✔</span>
-          <span><b>20 AI Images per day</b> powered by Google Imagen 3 & DALL-E</span>
+      <div class="upgrade-perks" style="margin-bottom: 20px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:13px;">
+          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span><b>20 AI Images per day</b> with Imagen 3 & DALL-E</span>
         </div>
-        <div class="perk-item">
-          <span class="perk-check">✔</span>
-          <span><b>100+ Daily Requests</b> with Deep Reasoning models</span>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:13px;">
+          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span><b>100+ daily requests</b> with deep reasoning models</span>
         </div>
-        <div class="perk-item">
-          <span class="perk-check">✔</span>
-          <span><b>Unlimited File & Document Exports</b> (Excel, PDF, Word)</span>
+        <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span><b>Document exports</b> in Excel (.xlsx), PDF, and Word</span>
         </div>
       </div>
 
-      <div class="upgrade-actions">
-        <button type="button" class="btn upgrade-confirm-btn" id="upgrade-confirm-btn">
+      <div class="upgrade-actions" style="display:flex; gap:10px;">
+        <button type="button" class="btn primary" id="upgrade-confirm-btn" style="flex:1;">
           <span>Upgrade to Pro</span>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
         </button>
         <button type="button" class="btn btn-ghost" id="upgrade-cancel-btn">Close</button>
       </div>
     </div>
   </div>
 </div>
+
 <script id="boot" type="application/json">{{ boot|tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/chat.js', v='5.0') }}"></script>{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/chat.js', v='6.5') }}"></script>
+<script>
+// Live Layout & Multi-UI Switcher System
+(function() {
+  function applyUILayout(uiNum) {
+    if (!['1', '2', '3', '4', '5'].includes(String(uiNum))) uiNum = '1';
+    document.body.setAttribute('data-ui', uiNum);
+    try { localStorage.setItem('upian_active_ui', uiNum); } catch(e) {}
+
+    // Update switcher buttons
+    document.querySelectorAll('[data-ui-set]').forEach(function(btn) {
+      if (btn.getAttribute('data-ui-set') === String(uiNum)) {
+        btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
+      } else {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-pressed', 'false');
+      }
+    });
+
+    // Elements visibility toggle for specialized layouts
+    var cmdChips = document.getElementById('cmd-chips-bar');
+    var researchBanner = document.getElementById('research-banner');
+    var artifactsPanel = document.getElementById('artifacts-panel');
+    var devTree = document.getElementById('dev-tree-sidebar');
+    var devTabs = document.getElementById('dev-tabs-bar');
+    var notionCanvas = document.getElementById('notion-canvas');
+    var emptyTitle = document.getElementById('empty-title');
+    var emptySubtitle = document.getElementById('empty-subtitle');
+
+    if (cmdChips) cmdChips.style.display = (uiNum === '1') ? 'flex' : 'none';
+    if (researchBanner) researchBanner.style.display = (uiNum === '2') ? 'flex' : 'none';
+    if (artifactsPanel) artifactsPanel.style.display = (uiNum === '3') ? 'flex' : 'none';
+    if (devTree) devTree.style.display = (uiNum === '4') ? 'flex' : 'none';
+    if (devTabs) devTabs.style.display = (uiNum === '4') ? 'flex' : 'none';
+    if (notionCanvas) notionCanvas.style.display = (uiNum === '5') ? 'block' : 'none';
+
+    // Update heading per UI style
+    if (emptyTitle) {
+      if (uiNum === '1') {
+        emptyTitle.textContent = 'Upian Model Routing';
+        if (emptySubtitle) emptySubtitle.textContent = 'High-velocity multimodal workspace. Use keyboard shortcuts or select prompt chips below.';
+      } else if (uiNum === '2') {
+        emptyTitle.textContent = 'Deep Research & Synthesis Engine';
+        if (emptySubtitle) emptySubtitle.textContent = 'Ask complex factual, scientific, or analytical questions with verified citations and multi-step reasoning.';
+      } else if (uiNum === '3') {
+        emptyTitle.textContent = 'Dual-Pane Artifacts Studio';
+        if (emptySubtitle) emptySubtitle.textContent = 'Interactive co-pilot. Your code, tables, and documents render live on the right canvas as you chat.';
+      } else if (uiNum === '4') {
+        emptyTitle.textContent = 'Developer Engineering Workspace';
+        if (emptySubtitle) emptySubtitle.textContent = 'Code generation, refactoring, SQL queries, and unified diffs. Fast routing across top-tier coding models.';
+      } else if (uiNum === '5') {
+        emptyTitle.textContent = 'Document AI Workspace';
+        if (emptySubtitle) emptySubtitle.textContent = 'Compose living product documents, technical specs, and summaries with inline AI assistance.';
+      }
+    }
+  }
+
+  // Load saved UI layout
+  var savedUI = '1';
+  try {
+    var stored = localStorage.getItem('upian_active_ui');
+    if (stored) savedUI = stored;
+  } catch(e) {}
+  applyUILayout(savedUI);
+
+  // Global listeners for layout buttons
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-ui-set]');
+    if (btn) {
+      var uiVal = btn.getAttribute('data-ui-set');
+      if (uiVal) applyUILayout(uiVal);
+    }
+  });
+
+  // UI 1 Prompt mode chips helper
+  window.setPromptPrefix = function(prefix) {
+    var input = document.getElementById('prompt');
+    if (input) {
+      input.value = prefix;
+      input.focus();
+    }
+  };
+
+  // UI 2 Research mode helper
+  window.setResearchMode = function(mode) {
+    document.querySelectorAll('.research-mode-btn').forEach(function(b) { b.classList.remove('active'); });
+    if (event && event.currentTarget) event.currentTarget.classList.add('active');
+    var p = document.getElementById('prompt');
+    if (p) {
+      if (mode === 'deep') p.placeholder = 'Enter research topic or question to synthesize...';
+      else if (mode === 'web') p.placeholder = 'Search web sources and summarize findings...';
+      else if (mode === 'academic') p.placeholder = 'Provide academic inquiry, theorem, or proof to analyze...';
+      p.focus();
+    }
+  };
+
+  // UI 3 Artifact helpers
+  window.switchArtifactTab = function(tab) {
+    document.querySelectorAll('.artifact-tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    var btn = document.getElementById('tab-art-' + tab);
+    if (btn) btn.classList.add('active');
+  };
+
+  window.copyArtifactContent = function() {
+    var body = document.getElementById('artifact-content-body');
+    if (body) {
+      navigator.clipboard.writeText(body.innerText).then(function() {
+        alert('Artifact content copied to clipboard.');
+      });
+    }
+  };
+
+  // UI 4 Developer tab helper
+  window.selectDevTab = function(filename) {
+    document.querySelectorAll('.dev-tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.dev-file-item').forEach(function(f) { f.classList.remove('active'); });
+    
+    var tab = document.getElementById('tab-' + filename.replace('.', '-'));
+    if (tab) tab.classList.add('active');
+
+    var p = document.getElementById('prompt');
+    if (p) {
+      p.value = 'Review and analyze ' + filename + ': ';
+      p.focus();
+    }
+  };
+
+  // UI 5 Notion template helper
+  window.applyDocTemplate = function(type) {
+    var p = document.getElementById('prompt');
+    if (!p) return;
+    if (type === 'prd') {
+      p.value = 'Draft a complete Product Requirements Document (PRD) for a modern real-time AI platform, including user personas, key features, and success metrics.';
+    } else if (type === 'arch') {
+      p.value = 'Design a scalable multi-region microservices architecture for a low-latency LLM gateway with rate limiting and automated failover.';
+    } else if (type === 'meeting') {
+      p.value = 'Draft an executive summary and key action items based on today\'s sprint planning and technical architecture review.';
+    }
+    p.focus();
+  };
+})();
+</script>
+{% endblock %}

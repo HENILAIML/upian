@@ -23,7 +23,7 @@
       if (!d.items || !d.items.length) {
         tbody.innerHTML = '<tr><td colspan="6" class="empty-docs-cell">' +
           '<div class="empty-docs-state">' +
-          '<div class="empty-docs-icon">📂</div>' +
+          '<div class="empty-docs-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);margin-bottom:8px;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></div>' +
           '<div class="empty-docs-title">No documents uploaded yet</div>' +
           '<p class="empty-docs-sub">Drag and drop documents or datasets above to index them for deep AI analysis and chat referencing.</p>' +
           '</div></td></tr>';

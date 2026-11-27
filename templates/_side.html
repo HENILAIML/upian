@@ -1,44 +1,98 @@
 <div class="brand-row">
-  <div class="brand">Upian AI</div>
+  <div class="brand">
+    <svg class="brand-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+      <path d="M2 17l10 5 10-5"></path>
+      <path d="M2 12l10 5 10-5"></path>
+    </svg>
+    <span>Upian AI</span>
+  </div>
 </div>
+
 <nav class="nav">
-  <a href="{{ url_for('home') }}" class="{{ 'on' if active == 'chat' else '' }}">Chat</a>
-  <a href="{{ url_for('plans_page') }}" class="{{ 'on' if active == 'plans' else '' }}" onclick="if(window.openPlanModal){event.preventDefault();window.openPlanModal();}">Plans & Upgrade</a>
-  <a href="{{ url_for('files_page') }}" class="{{ 'on' if active == 'files' else '' }}">My files</a>
-  <a href="{{ url_for('activity') }}" class="{{ 'on' if active == 'activity' else '' }}">My activity</a>
-  {% if me.is_admin %}<a href="{{ url_for('admin_home') }}">Admin dashboard</a>{% endif %}
+  <a href="{{ url_for('home') }}" class="{{ 'on' if active == 'chat' else '' }}">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+    <span>Chat</span>
+  </a>
+  <a href="{{ url_for('plans_page') }}" class="{{ 'on' if active == 'plans' else '' }}" onclick="if(window.openPlanModal){event.preventDefault();window.openPlanModal();}">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+    <span>Plans & Pricing</span>
+  </a>
+  <a href="{{ url_for('files_page') }}" class="{{ 'on' if active == 'files' else '' }}">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+    <span>My Files</span>
+  </a>
+  <a href="{{ url_for('activity') }}" class="{{ 'on' if active == 'activity' else '' }}">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+    <span>Activity</span>
+  </a>
+  {% if me.is_admin %}
+  <a href="{{ url_for('admin_home') }}">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+    <span>Admin</span>
+  </a>
+  {% endif %}
 </nav>
+
 {% if active == 'chat' %}
 <div class="side-history-section" id="side-history-section">
   <div class="side-history-head">
-    <span class="side-history-title">Chat history</span>
-    <button type="button" class="btn-side-new" id="side-new-chat-btn" title="Start a fresh chat conversation">+ New</button>
+    <span class="side-history-title">Chat History</span>
+    <button type="button" class="btn-side-new" id="side-new-chat-btn" title="Start a fresh chat conversation">New</button>
   </div>
   <div class="side-history-list" id="side-history-list">
     <div class="history-empty">No previous chats yet.</div>
   </div>
 </div>
 {% endif %}
+
 <div class="grow"></div>
-<div class="who-box">
-  <div class="who-top" id="who-profile-view">
-    <div class="who-name-row">
-      <div class="who-name-left">
-        <span class="who-name" id="who-display-name" title="Click to edit your nickname">{{ me.name }}</span>
+
+<div style="margin-bottom: 8px;">
+  <div class="theme-switch-control" role="radiogroup" aria-label="Theme selection" style="width: 100%; display: flex;">
+    <button type="button" class="theme-switch-btn" data-theme-val="white" aria-label="White theme" title="White theme" style="flex:1; justify-content:center;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+      <span>White</span>
+    </button>
+    <button type="button" class="theme-switch-btn" data-theme-val="black" aria-label="Black theme" title="Black theme" style="flex:1; justify-content:center;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+      <span>Black</span>
+    </button>
+  </div>
+</div>
+
+<div class="who-card">
+  <div class="who-user-info">
+    <div class="who-avatar">
+      <span>{{ (me.name or me.email or 'U')[0]|upper }}</span>
+    </div>
+    <div class="who-details">
+      <div class="who-profile-row" id="who-profile-view">
+        <span class="who-name" id="who-display-name" title="Click to edit nickname">{{ me.name }}</span>
         <button type="button" class="btn-nickname-edit" id="btn-edit-nickname" title="Edit nickname" aria-label="Edit nickname">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
           </svg>
         </button>
       </div>
+      <div class="nickname-edit-box" id="nickname-edit-box" hidden>
+        <input type="text" id="nickname-input" class="nickname-input" value="{{ me.name }}" maxlength="60" placeholder="Enter nickname">
+        <button type="button" id="nickname-save-btn" class="nickname-btn" title="Save">Save</button>
+        <button type="button" id="nickname-cancel-btn" class="nickname-btn" title="Cancel">Cancel</button>
+      </div>
+      <div class="who-mail" title="{{ me.email }}">{{ me.email }}</div>
     </div>
   </div>
-  <div class="nickname-edit-box" id="nickname-edit-box" hidden>
-    <input type="text" id="nickname-input" class="nickname-input" value="{{ me.name }}" maxlength="60" placeholder="Enter nickname">
-    <button type="button" id="nickname-save-btn" class="nickname-btn save" title="Save nickname">✓</button>
-    <button type="button" id="nickname-cancel-btn" class="nickname-btn cancel" title="Cancel">✕</button>
-  </div>
-  <div class="who-mail">{{ me.email }}</div>
-  <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link logout-btn" type="submit">Sign out</button></form>
+  <form method="post" action="{{ url_for('logout') }}" class="who-logout-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn-logout-structured" type="submit" title="Sign out of your account" aria-label="Sign out">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+        <polyline points="16 17 21 12 16 7"></polyline>
+        <line x1="21" y1="12" x2="9" y2="12"></line>
+      </svg>
+      <span>Sign out</span>
+    </button>
+  </form>
 </div>

@@ -1,57 +1,58 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="white">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>{% block title %}Upian AI{% endblock %}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='5.1') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='7.5') }}">
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>
-  try {
-    localStorage.removeItem('upian_theme');
-    document.documentElement.removeAttribute('data-theme');
-  } catch(e) {}
+  (function() {
+    try {
+      var saved = localStorage.getItem('upian_theme');
+      var theme = (saved === 'black' || saved === 'white') ? saved : 'white';
+      document.documentElement.setAttribute('data-theme', theme);
+    } catch(e) {
+      document.documentElement.setAttribute('data-theme', 'white');
+    }
+  })();
 </script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
 {% block body %}{% endblock %}
 
-<!-- PLAN & PAYMENT MODAL -->
+<!-- Plan & Payment Modal -->
 <div id="plan-payment-modal" class="modal-backdrop plan-modal-backdrop" hidden>
   <div class="plan-modal-box">
-    <button type="button" class="plan-modal-close" id="plan-modal-close" title="Close" aria-label="Close">&times;</button>
-    
-    <div id="plan-modal-body-step">
-      <div class="plan-modal-header">
-        <div class="plan-modal-icon">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-          </svg>
-        </div>
-        <div>
-          <h2>Choose or Customize Your Plan</h2>
-          <p class="plan-modal-sub">Pick a preset bundle or select features individually to pay dynamically for what you use.</p>
-        </div>
+    <div class="modal-top-bar">
+      <div class="modal-title-group">
+        <h2 class="modal-title">Select a Plan</h2>
+        <p class="modal-desc">Upgrade your account to access higher request limits, deeper reasoning models, and file exports.</p>
       </div>
+      <button type="button" class="btn-icon-close" id="plan-modal-close" title="Close" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
 
-      <!-- Billing Cycle Toggle Switch (Monthly / Yearly) -->
+    <div id="plan-modal-body-step">
+      <!-- Billing Cycle Toggle Switch -->
       <div class="billing-switcher-container">
-        <div class="billing-switcher-wrap" role="group" aria-label="Billing Cycle">
+        <div class="billing-switcher-wrap" role="group" aria-label="Billing cycle">
           <button type="button" class="btn-cycle-opt active" id="btn-cycle-monthly" onclick="switchBillingCycle('monthly')">
-            Monthly Billing
+            Monthly
           </button>
           <button type="button" class="btn-cycle-opt" id="btn-cycle-yearly" onclick="switchBillingCycle('yearly')">
-            <span>Yearly Billing</span>
-            <span class="cycle-savings-pill">Save ~17% (2 Mo Free)</span>
+            Yearly
+            <span class="cycle-savings-pill">Save 17%</span>
           </button>
         </div>
       </div>
 
-      <!-- Dynamic Plans Grid: Free, Pro, Pro Plus, and any Admin-Created Plans -->
+      <!-- Dynamic Plans Grid -->
       <div class="plan-select-grid" id="modal-view-presets">
         {% for p in DISPLAY_PLANS %}
         <label class="plan-card" data-plan="{{ p.id }}" id="card-modal-{{ p.id }}" onclick="selectModalPlan('{{ p.id }}')"
@@ -64,114 +65,127 @@
           <div class="plan-card-head">
             <div class="plan-card-title">
               <span class="plan-tag {{ 'free-tag' if (p.price == 0 or p.is_default) else ('popular' if p.id in ['pro', 'plus'] else 'max') }}">
-                {{ p.tag or ('STARTER' if (p.price == 0 or p.is_default) else ('RECOMMENDED' if p.id in ['pro', 'plus'] else 'PREMIUM')) }}
+                {{ p.tag or ('Starter' if (p.price == 0 or p.is_default) else ('Popular' if p.id in ['pro', 'plus'] else 'Enterprise')) }}
               </span>
               <h3>{{ p.label }}</h3>
             </div>
             <div class="plan-card-price">
-              <span class="currency">₹</span><span class="amount" id="{{ p.id }}-card-amount">{{ p.price_inr|int }}</span><span class="period" id="{{ p.id }}-card-period">{{ '/forever' if (p.price == 0 or p.is_default) else '/mo' }}</span>
+              <span class="currency">₹</span><span class="amount" id="{{ p.id }}-card-amount">{{ p.price_inr|int }}</span><span class="period" id="{{ p.id }}-card-period">{{ '/forever' if (p.price == 0 or p.is_default) else '/month' }}</span>
               <span class="usd-alt" id="{{ p.id }}-card-usd">(${{ p.price|int }} USD)</span>
             </div>
           </div>
-          <p class="plan-card-desc">{{ p.description or 'High-speed AI gateway and premium quota access.' }}</p>
+          <p class="plan-card-desc">{{ p.description or 'High-speed model routing and higher request quotas.' }}</p>
           <ul class="plan-features-list">
             {% if p.features and p.features|length > 0 %}
               {% for feat in p.features %}
-                <li><span>✔</span> {{ feat }}</li>
+                <li>
+                  <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>{{ feat }}</span>
+                </li>
               {% endfor %}
             {% else %}
-              <li><span>✔</span> <b>{{ p.daily }} requests</b> per day</li>
-              <li><span>✔</span> <b>{{ p.monthly }} requests</b> per month</li>
+              <li>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span><b>{{ p.daily }} requests</b> per day</span>
+              </li>
+              <li>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span><b>{{ p.monthly }} requests</b> per month</span>
+              </li>
               {% if p.image_gen %}
-                <li><span>✔</span> <b>{{ p.image_daily }} AI Images per day</b> (Imagen 3 & DALL-E)</li>
+              <li>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span><b>{{ p.image_daily }} AI images</b> per day</span>
+              </li>
               {% else %}
-                <li><span style="color:#e05252;">✕</span> <i>No AI Image Generation</i></li>
+              <li class="disabled-feat">
+                <svg class="cross-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <span>No AI image generation</span>
+              </li>
               {% endif %}
-              <li><span>✔</span> Deep Reasoning & fast routing</li>
-              <li><span>✔</span> Document exports (.xlsx, .pdf, .docx)</li>
+              <li>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Deep reasoning and smart routing</span>
+              </li>
+              <li>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Document exports (.xlsx, .pdf, .docx)</span>
+              </li>
             {% endif %}
           </ul>
           <div class="plan-card-foot-actions">
             <button type="button" class="btn-plan-select" id="btn-select-{{ p.id }}" onclick="selectModalPlan('{{ p.id }}'); event.stopPropagation();">
-              {{ ('Choose ' ~ p.label) if (p.price == 0 or p.is_default) else ('Choose ' ~ p.label ~ ' (₹' ~ (p.price_inr|int) ~ ')') }}
+              {{ ('Select ' ~ p.label) if (p.price == 0 or p.is_default) else ('Select ' ~ p.label ~ ' (₹' ~ (p.price_inr|int) ~ ')') }}
             </button>
           </div>
         </label>
         {% endfor %}
       </div>
 
-      <!-- Payment Section: Official Razorpay Payment Gateway -->
-      <div class="pay-section" style="background:#ffffff; border:1.5px solid var(--line2); border-radius:14px; padding:16px 18px; margin-bottom:18px;" hidden>
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span style="font-size:18px;">💳</span>
-            <span style="font:800 15px var(--display); color:var(--ink);">Razorpay Secure Checkout</span>
+      <!-- Payment Section -->
+      <div class="pay-section" id="modal-pay-section" hidden>
+        <div class="pay-section-header">
+          <div class="pay-section-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+              <line x1="2" y1="10" x2="22" y2="10"></line>
+            </svg>
+            <span>Payment Method</span>
           </div>
-          <span style="display:inline-flex; align-items:center; gap:5px; background:var(--weak-bg, #dcf3e8); color:var(--weak, #0c8a5a); font-size:11.5px; font-weight:700; padding:3px 10px; border-radius:99px; border:1px solid rgba(12,138,90,0.25);">
-            <span style="width:6px; height:6px; border-radius:50%; background:#17b26a; display:inline-block;"></span>
-            Official Partner · Active
-          </span>
+          <span class="pay-badge-secure">Encrypted Checkout</span>
         </div>
 
-        <div class="pay-tab-view" id="view-razorpay" style="display:block;">
-          <div style="background:#faf9f6; border:1.5px solid var(--line2); border-radius:12px; padding:14px 16px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
-              <div>
-                <p style="font-size:13px; font-weight:700; color:var(--ink); margin:0 0 4px;">Instant Activation via All Indian & Global Payment Methods</p>
-                <p style="font-size:12px; color:var(--mute); margin:0 0 10px;">Pay securely with any UPI app, Credit or Debit Card, Net Banking, or Wallet.</p>
-                <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                  <span style="display:inline-flex; align-items:center; gap:4px; background:#ffffff; border:1px solid var(--line2); border-radius:6px; padding:3px 8px; font-size:11.5px; font-weight:700; color:var(--ink2);">
-                    <span style="color:#0c8a5a;">⚡</span> UPI (GPay, PhonePe, Paytm)
-                  </span>
-                  <span style="display:inline-flex; align-items:center; gap:4px; background:#ffffff; border:1px solid var(--line2); border-radius:6px; padding:3px 8px; font-size:11.5px; font-weight:700; color:var(--ink2);">
-                    <span style="color:#e8813d;">💳</span> Credit / Debit Cards
-                  </span>
-                  <span style="display:inline-flex; align-items:center; gap:4px; background:#ffffff; border:1px solid var(--line2); border-radius:6px; padding:3px 8px; font-size:11.5px; font-weight:700; color:var(--ink2);">
-                    <span>🏦</span> 50+ Net Banking Banks
-                  </span>
-                </div>
+        <div class="pay-tab-view" id="view-razorpay">
+          <div class="pay-details-box">
+            <div class="pay-details-text">
+              <p class="pay-details-head">Supported Payment Options</p>
+              <p class="pay-details-sub">Pay securely using UPI (Google Pay, PhonePe, Paytm), credit/debit cards, or net banking.</p>
+              <div class="pay-methods-list">
+                <span class="pay-pill">UPI</span>
+                <span class="pay-pill">Cards (Visa, Mastercard, RuPay)</span>
+                <span class="pay-pill">Net Banking</span>
               </div>
             </div>
-            <div style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--line2); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-              <span style="font-size:12px; color:var(--mute); display:inline-flex; align-items:center; gap:5px;">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                256-Bit SSL Bank Encryption
+            <div class="pay-trust-footer">
+              <span class="trust-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <span>256-bit SSL encrypted</span>
               </span>
-              <span style="font-size:12px; font-weight:700; color:#0c8a5a; display:inline-flex; align-items:center; gap:4px;">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Instant Upgrade & Provisioning
+              <span class="trust-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Instant plan activation</span>
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Modal Footer / Action Button -->
+      <!-- Modal Footer -->
       <div class="plan-modal-foot">
-        <button type="button" class="btn-upgrade-action" id="btn-confirm-payment" disabled>
+        <button type="button" class="btn primary btn-upgrade-action" id="btn-confirm-payment" disabled>
           <span id="pay-btn-text">Select a plan above to continue</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
         </button>
-        <div class="pay-secure-note">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-          <span>256-Bit SSL Encrypted · Instant Plan Activation</span>
-        </div>
       </div>
     </div>
 
     <!-- Success View -->
     <div class="plan-modal-success" id="plan-modal-success" hidden>
-      <div class="success-icon-wrap">✔</div>
-      <h3>Payment Successful!</h3>
-      <p id="success-plan-msg">Welcome to <b>Upian AI Pro</b>! Your account has been upgraded and your quota is boosted.</p>
-      <div class="tx-badge" id="success-tx-id">TX: UPIAN-PAY-8F92A1</div>
+      <div class="success-icon-wrap">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>
+      <h3>Payment Complete</h3>
+      <p id="success-plan-msg">Your subscription has been updated and your quota is now active.</p>
+      <div class="tx-badge" id="success-tx-id">TX: UPIAN-PAY</div>
       <button type="button" class="btn primary" id="btn-success-done">Continue to Chat</button>
     </div>
   </div>
 </div>
 
 <script id="server-plans-data" type="application/json">{{ PLANS|tojson }}</script>
-<script src="{{ url_for('static', filename='js/common.js', v='5.4') }}"></script>
+<script src="{{ url_for('static', filename='js/common.js', v='7.5') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

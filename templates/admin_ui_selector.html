@@ -1,0 +1,170 @@
+{% extends "admin_base.html" %}
+{% block title %}Website Designs Selector · Upian Admin{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <h1>Select Platform Website Design</h1>
+    <p class="sub">Choose one of the 5 human-designed websites as the official user interface for all users of your platform.</p>
+  </div>
+</header>
+
+<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 30px;">
+  
+  <!-- Website 1 Card -->
+  <div class="panel" style="display:flex; flex-direction:column; position:relative; {{ 'border: 2px solid var(--accent);' if active_site == 1 else '' }}">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+      <div>
+        <span class="tag neutral" style="font-size:10px;">Design 1</span>
+        <h3 style="font-size:16px; font-weight:700; color:var(--text); margin-top:4px;">Apex Studio</h3>
+      </div>
+      {% if active_site == 1 %}
+        <span class="tag strong" style="font-weight:700;">Live for All Users</span>
+      {% endif %}
+    </div>
+    <p class="dim small" style="margin-bottom:16px; line-height:1.5; flex:1;">
+      Inspired by Linear & Raycast. Minimalist, keyboard-first command bar with quick prompt mode chips, focused reading stream, and subtle borders.
+    </p>
+    <div style="background:var(--code-bg); border:1px solid var(--border); border-radius:6px; padding:10px; margin-bottom:16px; font-size:11.5px; font-family:var(--mono);">
+      <div>• Keyboard-driven command prompt</div>
+      <div>• Instant prompt tags (Reasoning, Code)</div>
+      <div>• Streamlined single-column canvas</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <a href="/site1" target="_blank" class="btn sm" style="flex:1;">Preview Site 1</a>
+      <form method="post" action="{{ url_for('admin_set_ui') }}" style="flex:1;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="site_id" value="1">
+        <button type="submit" class="btn sm primary block" {{ 'disabled' if active_site == 1 else '' }}>
+          {{ 'Currently Active' if active_site == 1 else 'Set as Official UI' }}
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Website 2 Card -->
+  <div class="panel" style="display:flex; flex-direction:column; position:relative; {{ 'border: 2px solid var(--accent);' if active_site == 2 else '' }}">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+      <div>
+        <span class="tag neutral" style="font-size:10px;">Design 2</span>
+        <h3 style="font-size:16px; font-weight:700; color:var(--text); margin-top:4px;">Synapse Search</h3>
+      </div>
+      {% if active_site == 2 %}
+        <span class="tag strong" style="font-weight:700;">Live for All Users</span>
+      {% endif %}
+    </div>
+    <p class="dim small" style="margin-bottom:16px; line-height:1.5; flex:1;">
+      Inspired by Perplexity & Consensus. Research engine aesthetic with center search console, dynamic query modes, and grounded source reference chips.
+    </p>
+    <div style="background:var(--code-bg); border:1px solid var(--border); border-radius:6px; padding:10px; margin-bottom:16px; font-size:11.5px; font-family:var(--mono);">
+      <div>• Center search console & query modes</div>
+      <div>• Multi-source references & grounding</div>
+      <div>• Step-by-step reasoning breakdown</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <a href="/site2" target="_blank" class="btn sm" style="flex:1;">Preview Site 2</a>
+      <form method="post" action="{{ url_for('admin_set_ui') }}" style="flex:1;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="site_id" value="2">
+        <button type="submit" class="btn sm primary block" {{ 'disabled' if active_site == 2 else '' }}>
+          {{ 'Currently Active' if active_site == 2 else 'Set as Official UI' }}
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Website 3 Card -->
+  <div class="panel" style="display:flex; flex-direction:column; position:relative; {{ 'border: 2px solid var(--accent);' if active_site == 3 else '' }}">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+      <div>
+        <span class="tag neutral" style="font-size:10px;">Design 3</span>
+        <h3 style="font-size:16px; font-weight:700; color:var(--text); margin-top:4px;">Canvas Workspace</h3>
+      </div>
+      {% if active_site == 3 %}
+        <span class="tag strong" style="font-weight:700;">Live for All Users</span>
+      {% endif %}
+    </div>
+    <p class="dim small" style="margin-bottom:16px; line-height:1.5; flex:1;">
+      Inspired by Claude Artifacts. Dual-pane split layout with conversation on the left, and live interactive documents/code rendering on the right.
+    </p>
+    <div style="background:var(--code-bg); border:1px solid var(--border); border-radius:6px; padding:10px; margin-bottom:16px; font-size:11.5px; font-family:var(--mono);">
+      <div>• 50/50 Dual-pane split-screen</div>
+      <div>• Real-time artifact synchronization</div>
+      <div>• Full document & code canvas view</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <a href="/site3" target="_blank" class="btn sm" style="flex:1;">Preview Site 3</a>
+      <form method="post" action="{{ url_for('admin_set_ui') }}" style="flex:1;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="site_id" value="3">
+        <button type="submit" class="btn sm primary block" {{ 'disabled' if active_site == 3 else '' }}>
+          {{ 'Currently Active' if active_site == 3 else 'Set as Official UI' }}
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Website 4 Card -->
+  <div class="panel" style="display:flex; flex-direction:column; position:relative; {{ 'border: 2px solid var(--accent);' if active_site == 4 else '' }}">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+      <div>
+        <span class="tag neutral" style="font-size:10px;">Design 4</span>
+        <h3 style="font-size:16px; font-weight:700; color:var(--text); margin-top:4px;">DevPulse Studio</h3>
+      </div>
+      {% if active_site == 4 %}
+        <span class="tag strong" style="font-weight:700;">Live for All Users</span>
+      {% endif %}
+    </div>
+    <p class="dim small" style="margin-bottom:16px; line-height:1.5; flex:1;">
+      Inspired by Cursor & VS Code. Engineering-first IDE interface with workspace file explorer tree, editor tabs, terminal, and query inspector.
+    </p>
+    <div style="background:var(--code-bg); border:1px solid var(--border); border-radius:6px; padding:10px; margin-bottom:16px; font-size:11.5px; font-family:var(--mono);">
+      <div>• Left project file explorer tree</div>
+      <div>• Tabbed file editor navigation</div>
+      <div>• Technical diffs and query optimizer</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <a href="/site4" target="_blank" class="btn sm" style="flex:1;">Preview Site 4</a>
+      <form method="post" action="{{ url_for('admin_set_ui') }}" style="flex:1;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="site_id" value="4">
+        <button type="submit" class="btn sm primary block" {{ 'disabled' if active_site == 4 else '' }}>
+          {{ 'Currently Active' if active_site == 4 else 'Set as Official UI' }}
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Website 5 Card -->
+  <div class="panel" style="display:flex; flex-direction:column; position:relative; {{ 'border: 2px solid var(--accent);' if active_site == 5 else '' }}">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+      <div>
+        <span class="tag neutral" style="font-size:10px;">Design 5</span>
+        <h3 style="font-size:16px; font-weight:700; color:var(--text); margin-top:4px;">Upian Copilot</h3>
+      </div>
+      {% if active_site == 5 %}
+        <span class="tag strong" style="font-weight:700;">Live for All Users</span>
+      {% endif %}
+    </div>
+    <p class="dim small" style="margin-bottom:16px; line-height:1.5; flex:1;">
+      Inspired by Microsoft Copilot & Enterprise Workspaces. Fluent design with conversation styles (Creative, Balanced, Precise), work & web modes, starter action cards, and floating composer.
+    </p>
+    <div style="background:var(--code-bg); border:1px solid var(--border); border-radius:6px; padding:10px; margin-bottom:16px; font-size:11.5px; font-family:var(--mono);">
+      <div>• Fluent Design System with star hero icon</div>
+      <div>• Work Mode & Web Mode toggle</div>
+      <div>• Conversation styles (Creative / Balanced / Precise)</div>
+      <div>• Action cards & floating bottom composer</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <a href="/site5" target="_blank" class="btn sm" style="flex:1;">Preview Site 5</a>
+      <form method="post" action="{{ url_for('admin_set_ui') }}" style="flex:1;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="site_id" value="5">
+        <button type="submit" class="btn sm primary block" {{ 'disabled' if active_site == 5 else '' }}>
+          {{ 'Currently Active' if active_site == 5 else 'Set as Official UI' }}
+        </button>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

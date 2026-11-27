@@ -73,11 +73,11 @@
 <!-- ========================================================================= -->
 <!-- EDIT USER MODAL                                                           -->
 <!-- ========================================================================= -->
-<div id="editUserModal" class="modal-backdrop" hidden style="position:fixed;inset:0;background:rgba(18,18,18,0.55);backdrop-filter:blur(3px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;">
-  <div style="background:#fff;border:2px solid var(--ink);border-radius:16px;box-shadow:6px 6px 0 var(--ink);width:100%;max-width:480px;padding:24px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1.5px solid var(--line2);padding-bottom:12px;">
-      <h3 style="margin:0;font:800 20px var(--display);color:var(--ink);">Edit User</h3>
-      <button type="button" onclick="closeEditUserModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--mute);">&times;</button>
+<div id="editUserModal" class="modal-backdrop" hidden>
+  <div class="admin-modal-box modal-sm">
+    <div class="admin-modal-header">
+      <h3>Edit User</h3>
+      <button type="button" class="btn-close" onclick="closeEditUserModal()" aria-label="Close modal">&times;</button>
     </div>
 
     <form id="editUserForm" method="post" action="" onsubmit="return confirm('Save updates to this user account?');">
@@ -85,18 +85,18 @@
       <input type="hidden" name="next" value="{{ request.full_path }}">
 
       <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Full Name *</label>
-        <input type="text" id="edit-user-name" name="name" required style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+        <label>Full Name *</label>
+        <input type="text" id="edit-user-name" name="name" required>
       </div>
 
       <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Email Address *</label>
-        <input type="email" id="edit-user-email" name="email" required style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+        <label>Email Address *</label>
+        <input type="email" id="edit-user-email" name="email" required>
       </div>
 
       <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Subscription Plan</label>
-        <select id="edit-user-plan" name="plan" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+        <label>Subscription Plan</label>
+        <select id="edit-user-plan" name="plan">
           {% for p in plan_order %}
           {% set pl_opt = PLANS.get(p) %}
           <option value="{{ p }}">{{ pl_opt.label if pl_opt else p }} (₹{{ (pl_opt.price_inr|int) if (pl_opt and pl_opt.price_inr is defined) else '0' }})</option>
@@ -105,8 +105,8 @@
       </div>
 
       <div style="margin-bottom:18px;">
-        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ink);">Account Status</label>
-        <select id="edit-user-status" name="status" style="width:100%;padding:8px 10px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;">
+        <label>Account Status</label>
+        <select id="edit-user-status" name="status">
           <option value="1">Active</option>
           <option value="0">Disabled</option>
         </select>

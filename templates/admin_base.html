@@ -3,7 +3,15 @@
 {% block body %}
 <div class="a-shell">
   <aside class="a-side">
-    <div class="brand">Upian AI <span class="admin-tag">Admin</span></div>
+    <div class="brand">
+      <svg class="brand-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+        <path d="M2 17l10 5 10-5"></path>
+        <path d="M2 12l10 5 10-5"></path>
+      </svg>
+      <span>Upian AI</span>
+      <span class="admin-tag">Admin</span>
+    </div>
     <nav class="nav">
       <a href="{{ url_for('admin_home') }}" class="{{ 'on' if active == 'overview' else '' }}">Overview</a>
       <a href="{{ url_for('admin_analytics_page') }}" class="{{ 'on' if active == 'analytics' else '' }}">Analytics</a>
@@ -12,19 +20,49 @@
       <a href="{{ url_for('admin_requests') }}" class="{{ 'on' if active == 'requests' else '' }}">Requests</a>
     </nav>
     <div class="grow"></div>
-    <div class="who-box">
-      <div class="who-mail">{{ me.email }}</div>
-      <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link logout-btn" type="submit">Sign out</button></form>
+    <div style="margin-bottom: 8px;">
+      <div class="theme-switch-control" role="radiogroup" aria-label="Theme selection" style="width: 100%; display: flex;">
+        <button type="button" class="theme-switch-btn" data-theme-val="white" aria-label="White theme" title="White theme" style="flex:1; justify-content:center;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+          <span>White</span>
+        </button>
+        <button type="button" class="theme-switch-btn" data-theme-val="black" aria-label="Black theme" title="Black theme" style="flex:1; justify-content:center;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+          <span>Black</span>
+        </button>
+      </div>
+    </div>
+    <div class="who-card">
+      <div class="who-user-info">
+        <div class="who-avatar">
+          <span>{{ (me.name or me.email or 'A')[0]|upper }}</span>
+        </div>
+        <div class="who-details">
+          <div class="who-name" title="{{ me.name }}">{{ me.name }}</div>
+          <div class="who-mail" title="{{ me.email }}">{{ me.email }}</div>
+        </div>
+      </div>
+      <form method="post" action="{{ url_for('logout') }}" class="who-logout-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn-logout-structured" type="submit" title="Sign out of your account" aria-label="Sign out">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          <span>Sign out</span>
+        </button>
+      </form>
     </div>
   </aside>
   <main class="a-main">
-    <div class="admin-topbar-strip" style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:18px; padding-bottom:12px; border-bottom:1px solid var(--line2);">
-      <a href="{{ url_for('home') }}" class="btn-head-back-chat" title="Return to Chat Conversation">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <div class="admin-topbar-strip" style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:18px; padding-bottom:12px; border-bottom:1px solid var(--border);">
+      <a href="{{ url_for('home') }}" class="btn-head-back-chat" title="Return to chat">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="19" y1="12" x2="5" y2="12"></line>
           <polyline points="12 19 5 12 12 5"></polyline>
         </svg>
-        <span>← Back to Chat</span>
+        <span>Back to Chat</span>
       </a>
     </div>
     {% with messages = get_flashed_messages() %}{% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}

@@ -5,6 +5,7 @@
   var sendBtn = $('send'), liveList = $('live-list');
   var emptyHTML = $('empty').outerHTML;
   var KEY = 'upian_chat_' + boot.uid;
+  var BOT_WHO_HTML = '<div class="who assistant-who"><span class="bot-badge"><svg class="brand-logo-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg> <span>Upian AI</span></span></div>';
   /* Multi-conversation Chat History */
   var SESSIONS_KEY = 'upian_sessions_' + boot.uid;
   var ACTIVE_SESSION_KEY = 'upian_active_session_' + boot.uid;
@@ -67,7 +68,7 @@
     cont.innerHTML = sessions.map(function (s) {
       var isActive = s.id === currentSessionId;
       return '<div class="history-item' + (isActive ? ' active' : '') + '" data-sess-id="' + esc(s.id) + '">' +
-        '<span class="history-item-icon">💬</span>' +
+        '<svg class="history-item-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>' +
         '<span class="history-item-title" title="' + esc(s.title) + '">' + esc(s.title) + '</span>' +
         '<div class="history-item-actions">' +
           '<button type="button" class="history-act-btn" data-del-sess="' + esc(s.id) + '" title="Delete chat">&times;</button>' +
@@ -149,7 +150,7 @@
       userScrolledUp = false;
       sendBtn.disabled = false;
       sendBtn.classList.add('stop-mode');
-      sendBtn.innerHTML = '<span class="stop-sq">■</span> <span>Stop</span>';
+      sendBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px;"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg><span>Stop</span>';
       sendBtn.title = 'Stop generating (Esc)';
       var planWidget = $('topbar-plan-widget');
       if (planWidget) planWidget.style.pointerEvents = 'none';
@@ -224,8 +225,8 @@
         actions.className = 'msg-actions stopped-actions';
         actions.style.marginTop = '10px';
         actions.innerHTML =
-          '<button type="button" class="btn sm" onclick="window.retryLastPrompt()" style="margin-right:8px;">🔄 Retry</button>' +
-          '<button type="button" class="btn sm" onclick="window.continuePrompt()">▶ Continue generating</button>';
+          '<button type="button" class="btn sm" onclick="window.retryLastPrompt()" style="margin-right:8px;">Retry</button>' +
+          '<button type="button" class="btn sm" onclick="window.continuePrompt()">Continue generating</button>';
         currentPendingMsg.appendChild(actions);
       } else {
         currentPendingMsg.remove();
@@ -250,7 +251,7 @@
   function refreshChips() {
     var ids = selectedIds();
     chips.innerHTML = docs.filter(function (d) { return ids.indexOf(d.id) >= 0; }).map(function (d) {
-      return '<span class="chip">📄 ' + esc(d.filename) + ' <b data-uncheck="' + d.id + '" title="Remove">&times;</b></span>';
+      return '<span class="chip">' + esc(d.filename) + ' <b data-uncheck="' + d.id + '" title="Remove">&times;</b></span>';
     }).join('');
   }
 
@@ -504,36 +505,37 @@
     var st = document.createElement('style');
     st.textContent =
       '.ctx{position:relative;display:inline-block;user-select:none}' +
-      '.ctx-bar-pill{display:inline-flex;align-items:center;gap:8px;background:#0b0b0f;color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:22px;padding:7px 13px;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3);transition:all .2s ease;white-space:nowrap}' +
-      '.ctx-bar-pill:hover{background:#181822;border-color:rgba(255,255,255,.35)}' +
-      '.ctx-pill-ring{width:9px;height:9px;border-radius:50%;background:#2fd18b;display:inline-block;box-shadow:0 0 8px rgba(47,209,139,.4)}' +
-      '.ctx.warn .ctx-pill-ring{background:#ffb020;box-shadow:0 0 8px rgba(255,176,32,.5)}' +
-      '.ctx.full .ctx-pill-ring{background:#ff4d4f;box-shadow:0 0 8px rgba(255,77,79,.6)}' +
-      '.ctx-pill-arrow{font-size:11px;opacity:.7;transition:transform .2s ease}' +
+      '.ctx-bar-pill{display:inline-flex;align-items:center;gap:8px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:500;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.04);transition:all .15s ease;white-space:nowrap;height:32px;box-sizing:border-box}' +
+      '.ctx-bar-pill:hover{background:var(--surface-hover);border-color:#ff6a00}' +
+      '.ctx-pill-count{font-family:var(--font-mono, monospace);font-size:11px;color:var(--text-secondary);font-weight:500}' +
+      '.ctx-pill-ring{width:8px;height:8px;border-radius:50%;background:#2fd18b;display:inline-block;box-shadow:0 0 6px rgba(47,209,139,.4);flex-shrink:0}' +
+      '.ctx.warn .ctx-pill-ring{background:#ffb020;box-shadow:0 0 6px rgba(255,176,32,.5)}' +
+      '.ctx.full .ctx-pill-ring{background:#ff4d4f;box-shadow:0 0 6px rgba(255,77,79,.6)}' +
+      '.ctx-pill-arrow{font-size:10px;color:var(--text-muted);transition:transform .2s ease}' +
       '.ctx.open .ctx-pill-arrow{transform:rotate(180deg)}' +
-      '.ctx-panel{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);width:320px;max-width:92vw;background:#0f1015;color:#fff;border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:14px 16px;box-shadow:0 18px 42px rgba(0,0,0,.55);z-index:1000;font-size:12.5px}' +
-      '.ctx-panel-tabs{display:flex;background:rgba(255,255,255,.08);padding:3px;border-radius:10px;margin-bottom:14px}' +
-      '.ctx-tab-btn{flex:1;background:transparent;border:0;color:rgba(255,255,255,.65);font-size:12px;font-weight:600;padding:6px 10px;border-radius:7px;cursor:pointer;transition:all .15s ease}' +
-      '.ctx-tab-btn.active{background:#ff8f45;color:#fff;box-shadow:0 2px 8px rgba(255,143,69,.4)}' +
-      '.ctx-stat-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06)}' +
+      '.ctx-panel{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);width:320px;max-width:92vw;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:0 12px 32px rgba(0,0,0,.16);z-index:1000;font-size:12.5px}' +
+      '.ctx-panel-tabs{display:flex;background:var(--bg);border:1px solid var(--border-subtle);padding:3px;border-radius:10px;margin-bottom:14px}' +
+      '.ctx-tab-btn{flex:1;background:transparent;border:0;color:var(--text-secondary);font-size:12px;font-weight:600;padding:6px 10px;border-radius:7px;cursor:pointer;transition:all .15s ease}' +
+      '.ctx-tab-btn.active{background:#ff6a00;color:#fff;box-shadow:0 2px 8px rgba(255,106,0,.4)}' +
+      '.ctx-stat-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-subtle)}' +
       '.ctx-stat-row:last-of-type{border-bottom:0}' +
-      '.ctx-stat-row .lbl{color:rgba(255,255,255,.65);font-size:12px}' +
-      '.ctx-stat-row .val{font-weight:700;color:#fff;font-family:monospace}' +
-      '.ctx-progress{height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin:12px 0 14px}' +
+      '.ctx-stat-row .lbl{color:var(--text-secondary);font-size:12px}' +
+      '.ctx-stat-row .val{font-weight:700;color:var(--text);font-family:monospace}' +
+      '.ctx-progress{height:6px;border-radius:3px;background:var(--border);overflow:hidden;margin:12px 0 14px}' +
       '.ctx-progress-fill{height:100%;width:0;background:#2fd18b;transition:width .3s ease}' +
       '.ctx.warn .ctx-progress-fill{background:#ffb020}' +
       '.ctx.full .ctx-progress-fill{background:#ff4d4f}' +
-      '.ctx-breakdown{background:rgba(255,255,255,.04);border-radius:10px;padding:10px 12px;margin-top:10px}' +
-      '.ctx-bd-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.45);margin-bottom:6px}' +
-      '.ctx-bd-item{display:flex;justify-content:space-between;font-size:11.5px;color:rgba(255,255,255,.75);margin-bottom:4px}' +
-      '.ctx-btns{display:flex;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}' +
-      '.ctx-b{flex:1;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s ease;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}' +
-      '.ctx-b:hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.3)}' +
-      '.ctx-b.primary{background:#ff8f45;border-color:#ff8f45;color:#fff}' +
-      '.ctx-b.primary:hover{background:#ff7a28}' +
+      '.ctx-breakdown{background:var(--bg);border:1px solid var(--border-subtle);border-radius:10px;padding:10px 12px;margin-top:10px}' +
+      '.ctx-bd-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:6px}' +
+      '.ctx-bd-item{display:flex;justify-content:space-between;font-size:11.5px;color:var(--text-secondary);margin-bottom:4px}' +
+      '.ctx-btns{display:flex;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border-subtle)}' +
+      '.ctx-b{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s ease;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}' +
+      '.ctx-b:hover{background:var(--surface-hover);border-color:#ff6a00}' +
+      '.ctx-b.primary{background:#ff6a00;border-color:#ff6a00;color:#fff}' +
+      '.ctx-b.primary:hover{background:#e55f00}' +
       '.ctx-b:disabled{opacity:.4;cursor:not-allowed}' +
-      '.ctx-note{margin-top:8px;opacity:.65;font-size:11px;line-height:1.3}' +
-      '.ctx-msg{margin-top:8px;padding:6px 10px;border-radius:8px;background:rgba(255,176,32,.18);font-size:11px;line-height:1.3;color:#ffb020}' +
+      '.ctx-note{margin-top:8px;opacity:.65;font-size:11px;line-height:1.3;color:var(--text-muted)}' +
+      '.ctx-msg{margin-top:8px;padding:6px 10px;border-radius:8px;background:rgba(255,106,0,.12);font-size:11px;line-height:1.3;color:#ff6a00}' +
       '.ctx.full .ctx-msg{background:rgba(255,77,79,.2);color:#ff4d4f}' +
       '.streaming-cursor{display:inline-block;width:7px;height:14px;margin-left:3px;vertical-align:-1px;background-color:#ff8f45;animation:streamBlink .8s infinite;border-radius:2px}' +
       '@keyframes streamBlink{0%,100%{opacity:1}50%{opacity:0}}' +
@@ -820,7 +822,7 @@
   var menu = document.createElement('div');
   menu.className = 'plus-menu'; menu.hidden = true;
   menu.innerHTML = '<div class="plus-menu-head">Attach Content</div>' +
-    '<button type="button" class="plus-item" id="plus-up"><span style="font-size:18px">💻</span> <div><b>Upload from computer</b><div style="font-size:11px;color:var(--mute);font-weight:normal">Screenshots, Photos, PDFs, Word, Excel, CSV, TXT</div></div></button>' +
+    '<button type="button" class="plus-item" id="plus-up"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-right:8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg><div><b>Upload file</b><div style="font-size:11px;color:var(--text-secondary);font-weight:normal">Screenshots, documents, datasets</div></div></button>' +
     '<div class="plus-h"><span>Attach from My Files</span><a href="/files" target="_blank">Manage vault &rarr;</a></div>' +
     '<div id="plus-files"></div>';
   document.body.appendChild(menu);
@@ -886,12 +888,12 @@
         var src = f.thumbnail_url || f.url;
         return '<span class="thumb-chip"><img src="' + esc(src) + '"> ' + esc(f.original_filename) + ' <span class="rm" data-rm-up="' + i + '" title="Remove">&times;</span></span>';
       }
-      return '<span class="thumb-chip">📄 ' + esc(f.original_filename) + ' <span class="rm" data-rm-up="' + i + '" title="Remove">&times;</span></span>';
+      return '<span class="thumb-chip">' + esc(f.original_filename) + ' <span class="rm" data-rm-up="' + i + '" title="Remove">&times;</span></span>';
     }).join('');
 
     if (pendingUploads.length > 0) {
       html += pendingUploads.map(function (p) {
-        return '<span class="thumb-chip uploading"><span class="spin">⏳</span> ' + esc(p.name) + '</span>';
+        return '<span class="thumb-chip uploading">' + esc(p.name) + '</span>';
       }).join('');
     }
     upCont.innerHTML = html;
@@ -1162,8 +1164,8 @@
       nextAst = addPending();
       userMsg.parentNode.insertBefore(nextAst, userMsg.nextSibling);
     } else {
-      nextAst.innerHTML = '<div class="who assistant-who"><span class="bot-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> Upian AI</span></div>' +
-        '<div class="body pending-text"><span class="dots"><i></i><i></i><i></i></span><span class="ptext">AI is generating answer…</span></div>' +
+      nextAst.innerHTML = BOT_WHO_HTML +
+        '<div class="body pending-text"><span class="dots"><i></i><i></i><i></i></span><span class="ptext">Generating answer...</span></div>' +
         '<div class="body live-stream-body" style="display:none;"></div>';
     }
     nextAst._userMsg = userMsg;
@@ -1242,7 +1244,7 @@
             nextAst._extra = extra;
             nextAst._filesUsed = ev.files_used;
             nextAst._userMsg = userMsg;
-            nextAst.innerHTML = '<div class="who assistant-who"><span class="bot-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> Upian AI</span></div>' +
+            nextAst.innerHTML = BOT_WHO_HTML +
               '<div class="body">' + renderMd(ev.reply) + '</div>' + actionsBlock('assistant', ev.files_used, ev.reply, userMsg._versions, userMsg._versionIndex);
 
             // Sync with history
@@ -1305,7 +1307,7 @@
       nextAst._filesUsed = v.files_used;
       nextAst._userMsg = userMsg;
       var replyHtml = v.reply ? renderMd(v.reply) : '<em>(No response recorded for this version)</em>';
-      nextAst.innerHTML = '<div class="who assistant-who"><span class="bot-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> Upian AI</span></div>' +
+      nextAst.innerHTML = BOT_WHO_HTML +
         '<div class="body">' + replyHtml + '</div>' + actionsBlock('assistant', v.files_used, v.reply, userMsg._versions, newIdx);
     }
 
@@ -1323,6 +1325,8 @@
     }
     save();
   }
+
+  var BOT_WHO_HTML = '<div class="who assistant-who"><span class="bot-badge"><svg class="brand-logo-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg> <span>Upian AI</span></span></div>';
 
   function imageCard(img) {
     if (!img) return '';
@@ -1356,7 +1360,7 @@
           var src = att.thumbnail_url || att.url;
           return '<span class="msg-att-img" title="' + esc(att.original_filename) + '"><img src="' + esc(src) + '" alt="' + esc(att.original_filename) + '"></span>';
         }
-        return '<span class="msg-att-file">📄 ' + esc(att.original_filename) + '</span>';
+        return '<span class="msg-att-file"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>' + esc(att.original_filename) + '</span>';
       }).join('') + '</div>';
       body = attsHtml + body;
     }
@@ -1364,7 +1368,7 @@
     if (extra && extra.vision) body += visionCard(extra.vision);
     var whoHtml = role === 'user' ? '<div class="who user-who">You</div>' :
       role === 'error' ? '<div class="who error-who">Error</div>' :
-      '<div class="who assistant-who"><span class="bot-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> Upian AI</span></div>';
+      BOT_WHO_HTML;
     el.innerHTML = whoHtml +
       '<div class="body">' + body + '</div>' + actionsBlock(role, filesUsed, content, versions, verIdx);
     el._text = content;
@@ -1384,8 +1388,8 @@
     var el = document.createElement('article');
     el.className = 'msg assistant';
     el.innerHTML =
-      '<div class="who assistant-who"><span class="bot-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> Upian AI</span></div>' +
-      '<div class="body pending-text"><span class="dots"><i></i><i></i><i></i></span><span class="ptext">AI is generating answer…</span></div>' +
+      BOT_WHO_HTML +
+      '<div class="body pending-text"><span class="dots"><i></i><i></i><i></i></span><span class="ptext">Generating answer...</span></div>' +
       '<div class="body live-stream-body" style="display:none;"></div>';
     thread.appendChild(el);
     toBottom();
@@ -1436,7 +1440,7 @@
     // Generating State: While generating, hide the model name. Show only "AI is generating answer…"
     if (pend) {
       var ptext = pend.querySelector('.ptext');
-      if (ptext) ptext.textContent = 'AI is generating answer…';
+      if (ptext) ptext.textContent = 'Generating answer...';
     }
   }
 
@@ -1457,6 +1461,10 @@
     if (lastUserMsgEl) astEl._userMsg = lastUserMsgEl;
     history.push({ role: 'assistant', content: ev.reply, meta: ev.log, files_used: ev.files_used, extra: extra });
     save();
+    var artBody = document.getElementById('artifact-content-body');
+    if (artBody && document.body.getAttribute('data-ui') === '3') {
+      artBody.innerHTML = renderMd(ev.reply || '');
+    }
     if (row && row.el && row.el.isConnected) replaceLive(row, ev.log);
     if (ev.usage) renderUsage(ev.usage);
     if (ev.log) {
@@ -1486,8 +1494,8 @@
         actions.className = 'msg-actions stopped-actions';
         actions.style.marginTop = '10px';
         actions.innerHTML =
-          '<button type="button" class="btn sm" onclick="window.retryLastPrompt()" style="margin-right:8px;">🔄 Retry</button>' +
-          '<button type="button" class="btn sm" onclick="window.continuePrompt()">▶ Continue generating</button>';
+          '<button type="button" class="btn sm" onclick="window.retryLastPrompt()" style="margin-right:8px;">Retry</button>' +
+          '<button type="button" class="btn sm" onclick="window.continuePrompt()">Continue generating</button>';
         pend.appendChild(actions);
         history.push({ role: 'assistant', content: partial, stopped: true });
         save();
@@ -1581,7 +1589,7 @@
     if (boot && boot.can_image_gen === false && isClientImageRequest(prompt)) {
       addMessage('user', prompt);
       history.push({ role: 'user', content: prompt }); save();
-      addMessage('assistant', '⚠️ **AI Image Generation is a Pro Feature**\n\nYour current plan does not include AI image generation. Please **Upgrade to Pro** (includes **20 AI images per day**) or **Pro Plus** (includes **30 AI images per day**) to unlock image generation.\n\n<button type="button" class="btn sm primary" onclick="if(window.openPlanModal)window.openPlanModal()">⚡ Upgrade Plan (Choose Pro / Pro Plus)</button>');
+      addMessage('assistant', '**AI Image Generation is a Pro Feature**\n\nYour current plan does not include AI image generation. Please **Upgrade to Pro** (includes **20 AI images per day**) or **Pro Plus** (includes **30 AI images per day**) to unlock image generation.\n\n<button type="button" class="btn sm primary" onclick="if(window.openPlanModal)window.openPlanModal()">Upgrade Plan</button>');
       showUpgradeModal({
         title: 'AI Image Generation Requires Upgrade',
         current_plan: boot.plan,
@@ -1681,6 +1689,10 @@
               streamBody.style.display = 'block';
               streamBody.innerHTML = renderMd(pend._partialText) + '<span class="streaming-cursor"></span>';
             }
+            var artBody = document.getElementById('artifact-content-body');
+            if (artBody && document.body.getAttribute('data-ui') === '3') {
+              artBody.innerHTML = renderMd(pend._partialText);
+            }
             smartAutoScroll();
           }
           else if (ev.event === 'done') { finished = true; onDone(ev, pend, row); }
@@ -1688,7 +1700,7 @@
           else if (ev.event === 'upgrade_required') {
             finished = true;
             if (pend.isConnected) pend.remove();
-            addMessage('assistant', '⚠️ **AI Image Generation is a Pro Feature**\n\nFree users cannot generate AI images. Please **Upgrade to Pro** (includes **20 AI images per day**) or **Pro Plus** (includes **30 AI images per day**) to unlock image generation.\n\n<button type="button" class="btn sm primary" onclick="if(window.openPlanModal)window.openPlanModal()">⚡ Upgrade Plan (Choose Pro / Pro Plus)</button>');
+            addMessage('assistant', '**AI Image Generation is a Pro Feature**\n\nFree users cannot generate AI images. Please **Upgrade to Pro** (includes **20 AI images per day**) or **Pro Plus** (includes **30 AI images per day**) to unlock image generation.\n\n<button type="button" class="btn sm primary" onclick="if(window.openPlanModal)window.openPlanModal()">Upgrade Plan</button>');
             if (row.el.isConnected) replaceLive(row, ev.log);
             if (ev.usage) renderUsage(ev.usage);
             showUpgradeModal(ev);
@@ -1755,10 +1767,13 @@
       input.value = b.dataset.p; input.focus();
     }
   });
-  $('new-chat').addEventListener('click', function (e) {
-    e.preventDefault();
-    startNewChat();
-  });
+  var newChatEl = $('new-chat');
+  if (newChatEl) {
+    newChatEl.addEventListener('click', function (e) {
+      e.preventDefault();
+      startNewChat();
+    });
+  }
   var sideNewBtn = $('side-new-chat-btn');
   if (sideNewBtn) {
     sideNewBtn.addEventListener('click', function (e) {
@@ -1819,66 +1834,13 @@
     }
   });
 
-  /* Sidebar & Live Panel Collapsing (Left & Right Buttons) */
-  var shell = document.querySelector('.shell') || document.getElementById('app-shell');
-  var sidebarToggle = document.getElementById('sidebar-toggle');
-  var liveToggle = document.getElementById('live-toggle');
   var newChatBtn = document.getElementById('new-chat-btn');
-
-  function setSidebarCollapsed(col) {
-    if (!shell) return;
-    if (col) {
-      shell.classList.add('sidebar-collapsed');
-    } else {
-      shell.classList.remove('sidebar-collapsed');
-    }
-    try { localStorage.setItem('upian_sidebar_collapsed', col ? '1' : '0'); } catch(e){}
-    if (sidebarToggle) sidebarToggle.setAttribute('aria-expanded', !col);
-  }
-
-  function setLiveCollapsed(col) {
-    if (!shell) return;
-    if (col) {
-      shell.classList.add('live-collapsed');
-      if (liveToggle) liveToggle.classList.add('panel-off');
-    } else {
-      shell.classList.remove('live-collapsed');
-      if (liveToggle) liveToggle.classList.remove('panel-off');
-    }
-    try { localStorage.setItem('upian_live_collapsed', col ? '1' : '0'); } catch(e){}
-    if (liveToggle) liveToggle.setAttribute('aria-expanded', !col);
-  }
-
-  if (sidebarToggle) {
-    sidebarToggle.addEventListener('click', function (e) {
-      e.stopPropagation();
-      setSidebarCollapsed(!shell.classList.contains('sidebar-collapsed'));
-    });
-  }
-
-  if (liveToggle) {
-    liveToggle.addEventListener('click', function (e) {
-      e.stopPropagation();
-      setLiveCollapsed(!shell.classList.contains('live-collapsed'));
-    });
-  }
-
   if (newChatBtn) {
     newChatBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       startNewChat();
     });
   }
-
-  /* Restore saved collapse states */
-  try {
-    if (localStorage.getItem('upian_sidebar_collapsed') === '1') {
-      setSidebarCollapsed(true);
-    }
-    if (localStorage.getItem('upian_live_collapsed') === '1') {
-      setLiveCollapsed(true);
-    }
-  } catch(e){}
 
   /* Connect Upgrade modal button to the Payment modal */
   var upgradeConfirm = document.getElementById('upgrade-confirm-btn');

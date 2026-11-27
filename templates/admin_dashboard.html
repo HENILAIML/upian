@@ -1,10 +1,10 @@
 {% extends "admin_base.html" %}
-{% block title %}Overview · Upian admin{% endblock %}
+{% block title %}Overview · Upian Admin{% endblock %}
 {% block content %}
 <header class="page-head">
   <div>
-    <h1>Overview</h1>
-    <p class="sub" id="stamp">Loading…</p>
+    <h1>System Overview</h1>
+    <p class="sub" id="stamp">Loading metrics…</p>
   </div>
   <div id="clf" class="clf"></div>
 </header>
@@ -13,35 +13,46 @@
 
 <section class="cols wide-left">
   <div class="panel">
-    <div class="panel-head"><h2>Requests in the last 14 days</h2>
-      <div class="legend"><span class="key strong"></span>Strong <span class="key weak"></span>Weak</div></div>
+    <div class="panel-head">
+      <h2>Requests (Last 14 Days)</h2>
+      <div class="legend" style="display:flex; align-items:center; gap:12px; font-size:12px; color:var(--text-secondary);">
+        <span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:2px; background:#c2561a;"></span>Strong</span>
+        <span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:2px; background:#17b26a;"></span>Weak</span>
+      </div>
+    </div>
     <div id="chart"></div>
   </div>
   <div class="panel">
-    <div class="panel-head"><h2>Users by plan</h2></div>
+    <div class="panel-head"><h2>Users by Plan</h2></div>
     <div id="plans"></div>
   </div>
 </section>
 
 <section class="cols even">
   <div class="panel">
-    <div class="panel-head"><h2>Models used this month</h2></div>
+    <div class="panel-head"><h2>Models Used This Month</h2></div>
     <div class="table-wrap"><table class="tbl" id="models"></table></div>
   </div>
   <div class="panel">
-    <div class="panel-head"><h2>Most active today</h2></div>
+    <div class="panel-head"><h2>Most Active Users Today</h2></div>
     <div class="table-wrap"><table class="tbl" id="top-users"></table></div>
   </div>
 </section>
 
 <section class="panel">
-  <div class="panel-head"><h2>API slots</h2><span class="dim small">Strong prompts try strong slots first, weak prompts try weak slots first. Free is the final fallback.</span></div>
+  <div class="panel-head">
+    <h2>API Routing Slots</h2>
+    <span class="dim small">Priority ordering across configured provider slots.</span>
+  </div>
   <div class="table-wrap"><table class="tbl" id="slots"></table></div>
 </section>
 
-<section class="panel">
-  <div class="panel-head"><h2>Latest requests</h2><a class="small" href="{{ url_for('admin_requests') }}">See all requests</a></div>
+<section class="panel flush">
+  <div class="panel-head">
+    <h2>Recent Requests</h2>
+    <a class="small link" href="{{ url_for('admin_requests') }}">View all requests</a>
+  </div>
   <div class="table-wrap"><table class="tbl" id="recent"></table></div>
 </section>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/admin.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/admin.js', v='7.2') }}"></script>{% endblock %}

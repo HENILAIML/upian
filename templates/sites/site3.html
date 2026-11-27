@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Canvas Workspace · Upian AI{% endblock %}
+{% block body_class %}app site3-body{% endblock %}
+{% block body %}
+<div id="drop-overlay" class="drop-overlay">Drop files or images to attach</div>
+
+<div class="shell" id="app-shell" data-ui="3">
+  <aside class="side" id="sidebar">
+    {% set active = 'chat' %}
+    {% include "_side.html" %}
+  </aside>
+
+  <!-- Left: Conversational Stream -->
+  <main class="chat artifacts-left-chat" id="chat-dropzone">
+    <header class="chat-topbar" id="chat-topbar">
+      <div class="topbar-left">
+        <button type="button" class="panel-toggle-btn" id="sidebar-toggle" title="Toggle sidebar" aria-label="Toggle sidebar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <span style="font-weight:700; font-size:14px; margin-left:8px; color:var(--text);">Canvas Dual-Pane Workspace</span>
+        <span class="tag strong" style="font-size:10px;">UI 3</span>
+      </div>
+
+      <div class="topbar-center" id="topbar-center">
+        <div class="topbar-plan-widget" id="topbar-plan-widget">
+          <button type="button" class="topbar-plan-btn" id="topbar-plan-btn">
+            <span class="plan-pill-name" id="top-plan-name">{{ PLANS[me.plan].label }}</span>
+            <span class="plan-pill-count" id="top-plan-count">--</span>
+          </button>
+        </div>
+        <div id="ctx-mount"></div>
+      </div>
+
+      <div class="topbar-right">
+        <button type="button" class="new-chat-pill" id="new-chat-btn" title="New thread">New thread</button>
+      </div>
+    </header>
+
+    <div id="scroller" class="scroller">
+      <div class="col" id="thread">
+        <div class="empty" id="empty">
+          <h1>Canvas Dual-Pane Workspace</h1>
+          <p>Collaborative canvas. Conversational intelligence on the left, live code and interactive artifacts rendered on the right.</p>
+          <div class="starters">
+            <button type="button" class="starter" data-p="Write a complete Python script implementing Dijkstra's shortest path algorithm with typed classes and docstrings.">Implement Dijkstra's shortest path</button>
+            <button type="button" class="starter" data-p="Draft an interactive HTML/CSS dashboard layout with stats cards and a chart table.">Interactive HTML/CSS dashboard layout</button>
+            <button type="button" class="starter" data-p="Write a production SQL schema for an e-commerce platform with orders, users, and audit logs.">E-commerce SQL schema & audit table</button>
+            <button type="button" class="starter" data-p="Explain what DNS does in two sentences.">Explain what DNS does in two sentences.</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <form id="composer" class="composer" autocomplete="off">
+      <div class="composer-chips-row" id="composer-chips">
+        <div class="chips" id="chips"></div>
+        <div class="chips" id="uploaded-chips"></div>
+      </div>
+      <div class="col composer-row">
+        <button type="button" class="plus-btn" id="plus-btn" title="Attach files" aria-label="Attach files">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+        <textarea id="prompt" rows="1" maxlength="{{ max_chars }}" placeholder="Ask or describe an artifact to generate..." aria-label="Message"></textarea>
+        <button id="send" class="btn primary" type="submit" aria-label="Send">Send</button>
+      </div>
+      <input type="file" id="direct-upload" multiple hidden accept="image/*,.png,.jpg,.jpeg,.webp,.bmp,.jfif,.pdf,.docx,.xlsx,.txt,.csv">
+      <div class="col composer-hint">
+        <span>Artifacts display in right canvas · <a href="{{ url_for('files_page') }}" class="link">Files</a></span>
+      </div>
+    </form>
+  </main>
+
+  <!-- Right: Live Artifacts Canvas -->
+  <aside class="artifacts-right-canvas" id="artifacts-panel" style="width:48%; flex:none; background:var(--surface); display:flex; flex-direction:column; height:100vh; border-left:1px solid var(--border);">
+    <div class="artifact-canvas-head" style="display:flex; align-items:center; justify-content:space-between; padding:10px 16px; border-bottom:1px solid var(--border); background:var(--bg);">
+      <div class="artifact-tabs" style="display:flex; gap:4px;">
+        <button type="button" class="artifact-tab-btn active" id="tab-art-preview" onclick="document.querySelectorAll('.artifact-tab-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active');">Live Artifact</button>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button type="button" class="action-icon-btn" onclick="navigator.clipboard.writeText(document.getElementById('artifact-content-body').innerText).then(()=>alert('Artifact copied!'));" title="Copy code">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span>Copy</span>
+        </button>
+      </div>
+    </div>
+    <div class="artifact-canvas-body" id="artifact-content-body" style="flex:1; overflow-y:auto; padding:24px;">
+      <div style="color:var(--text-secondary); text-align:center; padding-top:48px;">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="color:var(--text-muted); margin-bottom:12px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+        <p style="font-weight:600; color:var(--text); margin-bottom:4px;">Live Artifact Studio</p>
+        <p style="font-size:12.5px;">Code blocks, documents, and datasets stream directly here as answers generate.</p>
+      </div>
+    </div>
+    <div class="artifact-canvas-footer" style="padding:10px 16px; border-top:1px solid var(--border); font-size:11.5px; color:var(--text-muted); display:flex; justify-content:space-between; background:var(--bg);">
+      <span>Canvas Auto-Sync</span>
+      <span class="mono">Dual-Engine Active</span>
+    </div>
+  </aside>
+</div>
+
+<script id="boot" type="application/json">{{ boot|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/chat.js', v='7.0') }}"></script>
+{% endblock %}

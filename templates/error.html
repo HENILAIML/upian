@@ -2,9 +2,9 @@
 {% block title %}{{ code }} · Upian AI{% endblock %}
 {% block body_class %}plain{% endblock %}
 {% block body %}
-<main class="err-page">
-  <p class="err-code">{{ code }}</p>
-  <h1>{{ message }}</h1>
-  <p><a class="btn" href="{{ url_for('home') }}">Back to Upian</a></p>
+<main class="err-page" style="min-height: 80vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px;">
+  <p class="err-code" style="font-size: 48px; font-weight: 700; color: var(--accent); margin-bottom: 8px;">{{ code }}</p>
+  <h1 style="font-size: 20px; font-weight: 600; color: var(--text); margin-bottom: 16px;">{{ message }}</h1>
+  <p><a class="btn primary" href="{{ url_for('home') }}">Return to Upian AI</a></p>
 </main>
 {% endblock %}
