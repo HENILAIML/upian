@@ -142,7 +142,10 @@ def get_history(asset, start_year):
 # ----------------------------------------------------------------------------- understanding the question
 _ASSET = re.compile(r"\b(gold|silver)\b", re.I)
 _PRICE = re.compile(r"\b(price|prices|rate|rates|cost|value|worth|history|today|now|current\w*|live|how much)\b", re.I)
-_NOT_DATA = re.compile(r"\b(why|how (?:do|does|is|are|can)|explain|reason|affect\w*|determin\w*|predict\w*|forecast\w*)\b", re.I)
+_NOT_DATA = re.compile(
+    r"\b(why|how (?:do|does|is|are|can)|explain|reason|affect\w*|determin\w*|predict\w*|forecast\w*|translate|translation|language|english|gujarati|hindi|marathi|tamil|telugu|bengali|spanish|french|german|detail|summary|summarize)\b",
+    re.I,
+)
 
 
 def detect_asset(prompt, history=None):
@@ -160,15 +163,22 @@ def detect_asset(prompt, history=None):
     # 2. Contextual follow-up: user asks about price/currency/country/share for an asset in recent history
     # Example: User asks "what is the price of gold?", then follows up with "Indian price", "what about in India", "share price"
     p_lower = prompt.lower().strip()
+    if re.search(r"\b(?:in\s+)?(english|gujarati|hindi|marathi|tamil|telugu|bengali|spanish|french|german|urdu|arabic|russian|chinese|japanese|korean)\b", p_lower):
+        return None
+    if re.search(r"\b(translate|translation|meaning|define|definition|summary|summarize|detail|bullet points?)\b", p_lower):
+        return None
+
     is_price_followup = bool(
         _PRICE.search(prompt)
         or re.search(r"\b(indian?|inr|rupees?|rs|₹|usd|dollars?|\$|share\s*price|market\s*price)\b", p_lower)
-        or re.search(r"\b(?:what|how)\s+about\b|\b(?:and\s+)?in\s+[a-z]+", p_lower)
+        or re.search(r"\b(?:what|how)\s+about\b|\b(?:and\s+)?in\s+(?:inr|usd|eur|gbp|aed|cad|aud|jpy|cny|sar|rupees?|dollars?|euros?|pounds?|india|us|usa|japan|uk|uae|dubai)\b", p_lower)
     )
 
     if is_price_followup and history and isinstance(history, list):
         for msg in reversed(history):
             content = (msg.get("content") or "") if isinstance(msg, dict) else str(msg)
+            if not (_PRICE.search(content) or "gold price" in content.lower() or "silver price" in content.lower()):
+                continue
             m_prev = _ASSET.search(content)
             if m_prev:
                 return m_prev.group(1).lower()

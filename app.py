@@ -55,6 +55,11 @@ ACTIVE_CHAT_LOCK = threading.Lock()
 
 app = Flask(__name__)
 app.config.from_object(Config)
+
+# Enable ProxyFix to correctly handle reverse proxies like Render / Cloudflare (X-Forwarded-For, X-Forwarded-Proto, X-Forwarded-Host)
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
 db.init_app(app)
 
 
@@ -953,8 +958,9 @@ def auth_google_login():
     session["google_oauth_state"] = state
 
     redirect_uri = Config.GOOGLE_REDIRECT_URI
-    if not redirect_uri:
-        redirect_uri = url_for("auth_google_callback", _external=True)
+    if not redirect_uri or ("onrender.com" in redirect_uri and "onrender.com" not in request.host):
+        scheme = "https" if (request.is_secure or request.headers.get("X-Forwarded-Proto") == "https") else request.scheme
+        redirect_uri = f"{scheme}://{request.host}{url_for('auth_google_callback')}"
         if "127.0.0.1:" in redirect_uri:
             redirect_uri = redirect_uri.replace("127.0.0.1:", "localhost:")
     session["google_oauth_redirect_uri"] = redirect_uri
@@ -1007,8 +1013,9 @@ def auth_google_callback():
             return redirect(url_for("login"))
 
         redirect_uri = session.pop("google_oauth_redirect_uri", None) or Config.GOOGLE_REDIRECT_URI
-        if not redirect_uri:
-            redirect_uri = url_for("auth_google_callback", _external=True)
+        if not redirect_uri or ("onrender.com" in redirect_uri and "onrender.com" not in request.host):
+            scheme = "https" if (request.is_secure or request.headers.get("X-Forwarded-Proto") == "https") else request.scheme
+            redirect_uri = f"{scheme}://{request.host}{url_for('auth_google_callback')}"
             if "127.0.0.1:" in redirect_uri:
                 redirect_uri = redirect_uri.replace("127.0.0.1:", "localhost:")
 
